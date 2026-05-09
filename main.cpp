@@ -84,47 +84,62 @@ int main() {
     arquivo.close();   
     
     
-
-// 3. O CORAÇÃO DA SIMULAÇÃO (O NOVO TRECHO)
-    std::queue<TCB*> fila_prontos; 
+std::queue<TCB*> fila_prontos; 
     int clock_global = 0;
     int tarefas_concluidas = 0;
     int total_tarefas = lista_tarefas.size();
 
-    std::cout << "\nIniciando Simulacao de Escalonamento...\n";
+    // Criando o "hardware": um vetor de CPUs (Requisito 2.7)
+    // Cada posição representa uma CPU. Começam todas vazias (nullptr).
+    std::vector<TCB*> cpus(qtde_cpus, nullptr);
+
+    std::cout << "\nIniciando Simulacao com " << qtde_cpus << " CPUs...\n";
     
-    //Processando tarefas
     while (tarefas_concluidas < total_tarefas) {
         
-        // Verifica novo ingresso
+        // 1. Verificar ingressos (Novas tarefas chegando)
         for (size_t i = 0; i < lista_tarefas.size(); i++) {
             if (lista_tarefas[i].tempo_ingresso == clock_global && lista_tarefas[i].estado == Estado::NOVO) {
                 lista_tarefas[i].estado = Estado::PRONTA;
                 fila_prontos.push(&lista_tarefas[i]);
-                std::cout << "[Tick " << clock_global << "] Tarefa " << lista_tarefas[i].id << " ingressou no sistema.\n";
+                std::cout << "[Tick " << clock_global << "] Tarefa " << lista_tarefas[i].id << " ingressou.\n";
             }
         }
 
-        // Processa a tarefa que estiver na frente 
-        if (!fila_prontos.empty()) {
-            TCB* atual = fila_prontos.front();
-            atual->estado = Estado::EXECUTANDO;
-
-            std::cout << "[Tick " << clock_global << "] CPU 1 executando Tarefa " << atual->id 
-                      << " (Restam: " << --atual->tempo_restante << ")\n";
-
-            if (atual->tempo_restante <= 0) {
-                atual->estado = Estado::TERMINADA;
+        // 2. Distribuir tarefas para CPUs ociosas (Requisito 2.8)
+        for (int i = 0; i < qtde_cpus; i++) {
+            if (cpus[i] == nullptr && !fila_prontos.empty()) {
+                cpus[i] = fila_prontos.front();
                 fila_prontos.pop();
-                tarefas_concluidas++;
-                std::cout << "[Tick " << clock_global << "] Tarefa " << atual->id << " FINALIZADA.\n";
+                cpus[i]->estado = Estado::EXECUTANDO;
+                std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " assumiu Tarefa " << cpus[i]->id << "\n";
             }
-        } else {
-            std::cout << "[Tick " << clock_global << "] Sistema Ocioso...\n";
+        }
+
+        // 3. Processar o tempo em cada CPU
+        bool alguma_cpu_trabalhando = false;
+        for (int i = 0; i < qtde_cpus; i++) {
+            if (cpus[i] != nullptr) {
+                alguma_cpu_trabalhando = true;
+                std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " executando T" << cpus[i]->id 
+                          << " (Faltam: " << --cpus[i]->tempo_restante << ")\n";
+
+                // Se a tarefa acabou nesta CPU
+                if (cpus[i]->tempo_restante <= 0) {
+                    cpus[i]->estado = Estado::TERMINADA;
+                    std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " finalizou Tarefa " << cpus[i]->id << "\n";
+                    cpus[i] = nullptr; // Libera a CPU para o próximo tick
+                    tarefas_concluidas++;
+                }
+            }
+        }
+
+        if (!alguma_cpu_trabalhando && fila_prontos.empty() && tarefas_concluidas < total_tarefas) {
+            std::cout << "[Tick " << clock_global << "] Todas as CPUs ociosas...\n";
         }
 
         clock_global++;
-        if (clock_global > 200) break; // Segurança contra loops infinitos
+        if (clock_global > 300) break; 
     }
 
     std::cout << "\nSimulacao concluida no tick " << clock_global << "!\n";
