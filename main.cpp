@@ -89,15 +89,14 @@ std::queue<TCB*> fila_prontos;
     int tarefas_concluidas = 0;
     int total_tarefas = lista_tarefas.size();
 
-    // Criando o "hardware": um vetor de CPUs (Requisito 2.7)
-    // Cada posição representa uma CPU. Começam todas vazias (nullptr).
+    // vetor de CPUs 
     std::vector<TCB*> cpus(qtde_cpus, nullptr);
 
     std::cout << "\nIniciando Simulacao com " << qtde_cpus << " CPUs...\n";
     
     while (tarefas_concluidas < total_tarefas) {
         
-        // 1. Verificar ingressos (Novas tarefas chegando)
+        //verifica novos ingressos 
         for (size_t i = 0; i < lista_tarefas.size(); i++) {
             if (lista_tarefas[i].tempo_ingresso == clock_global && lista_tarefas[i].estado == Estado::NOVO) {
                 lista_tarefas[i].estado = Estado::PRONTA;
@@ -106,7 +105,7 @@ std::queue<TCB*> fila_prontos;
             }
         }
 
-        // 2. Distribuir tarefas para CPUs ociosas (Requisito 2.8)
+        // distribuir tarefas para CPUs ociosas
         for (int i = 0; i < qtde_cpus; i++) {
             if (cpus[i] == nullptr && !fila_prontos.empty()) {
                 cpus[i] = fila_prontos.front();
@@ -116,7 +115,7 @@ std::queue<TCB*> fila_prontos;
             }
         }
 
-        // 3. Processar o tempo em cada CPU
+        //processa o tempo em cada CPU
         bool alguma_cpu_trabalhando = false;
         for (int i = 0; i < qtde_cpus; i++) {
             if (cpus[i] != nullptr) {
@@ -128,7 +127,7 @@ std::queue<TCB*> fila_prontos;
                 if (cpus[i]->tempo_restante <= 0) {
                     cpus[i]->estado = Estado::TERMINADA;
                     std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " finalizou Tarefa " << cpus[i]->id << "\n";
-                    cpus[i] = nullptr; // Libera a CPU para o próximo tick
+                    cpus[i] = nullptr; // libera a CPU para o próximo tick
                     tarefas_concluidas++;
                 }
             }
@@ -139,7 +138,7 @@ std::queue<TCB*> fila_prontos;
         }
 
         clock_global++;
-        if (clock_global > 300) break; 
+        if (clock_global > 300) break; //limite
     }
 
     std::cout << "\nSimulacao concluida no tick " << clock_global << "!\n";
