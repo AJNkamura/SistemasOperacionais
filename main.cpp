@@ -29,12 +29,12 @@ int main() {
     }
     */
 
-    std::string arquivo_tarefas = "tarefas_complexas.txt";
+    std::string arquivo_tarefas = "tarefas_SRTF.txt";
     
     //abrir arquivo txt
     std::ifstream arquivo(arquivo_tarefas);
     if (!arquivo.is_open()) {
-        std::cerr << "Erro ao abrir tarefas_complexas.txt" << std::endl;
+        std::cerr << "Erro ao abrir tarefas" << std::endl;
         return 1;
     }
 
@@ -86,18 +86,16 @@ int main() {
     arquivo.close();   
     
     
-// --- LÓGICA DE SIMULAÇÃO (PRIOP COM BUSCA MANUAL) ---
-    std::vector<TCB*> fila_prontos;
+// --- Implement PRIOP pu SRTF ---
+    std::vector<TCB*> fila_prontos; //vetor de prontos
     int clock_global = 0;
     int tarefas_concluidas = 0;
     int total_tarefas = lista_tarefas.size();
-    std::vector<TCB*> cpus(qtde_cpus, nullptr);
-
-    std::cout << "\nIniciando Simulacao PRIOP com " << qtde_cpus << " CPUs...\n";
+    std::vector<TCB*> cpus(qtde_cpus, nullptr); //vetor de CPU
     
+    //Loop principal
     while (tarefas_concluidas < total_tarefas) {
-        
-        // 1- Verifica novos ingressos 
+        //Verifica novos ingressos: mover tarefas do vetor para a fila de prontos
         for (size_t i = 0; i < lista_tarefas.size(); i++) {
             if (lista_tarefas[i].tempo_ingresso == clock_global && lista_tarefas[i].estado == Estado::NOVO) {
                 lista_tarefas[i].estado = Estado::PRONTA;
@@ -106,21 +104,31 @@ int main() {
             }
         }
 
-        // 2- Alocação e Preempção
-        bool mudanca_na_fila = true;
-        while (!fila_prontos.empty() && mudanca_na_fila) {
-            mudanca_na_fila = false;
-
-            // Achar menor prioridade
+            /* teste PRIOP - menor prioridade
             int melhor_idx = 0;
             for (size_t j = 1; j < fila_prontos.size(); j++) {
                 if (fila_prontos[j]->prioridade < fila_prontos[melhor_idx]->prioridade) {
                     melhor_idx = j;
                 }
+            */
+        
+            bool mudanca_na_fila = true;
+            while (!fila_prontos.empty() && mudanca_na_fila) {
+                 mudanca_na_fila = false;
+
+           // Achar a melhor tarefa baseado no algoritmo escolhido
+            int melhor_idx = 0;
+            for (size_t j = 1; j < fila_prontos.size(); j++) {
+                if (algoritmo == "PRIOP") {
+                    if (fila_prontos[j]->prioridade < fila_prontos[melhor_idx]->prioridade) melhor_idx = j;
+                } else if (algoritmo == "SRTF") {
+                    if (fila_prontos[j]->tempo_restante < fila_prontos[melhor_idx]->tempo_restante) melhor_idx = j;
+                }
             }
+
             TCB* melhor_da_fila = fila_prontos[melhor_idx];
 
-            // Tentar CPU vazia
+            // Otimização - Tentar alguma CPU vazia e aloca se tiver
             bool alocou = false;
             for (int i = 0; i < qtde_cpus; i++) {
                 if (cpus[i] == nullptr) {
@@ -129,31 +137,42 @@ int main() {
                     fila_prontos.erase(fila_prontos.begin() + melhor_idx);
                     std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " assumiu T" << cpus[i]->id << "\n";
                     alocou = true;
-                    mudanca_na_fila = true;
+                    mudanca_na_fila = true; //reavaliar a fila no mesmo tick
                     break;
                 }
             }
 
-            // Sem CPU vazia -> tenta Preemp
+            // Sem CPU vazia - Preempção
             if (!alocou) {
                 int pior_cpu_idx = -1;
-                int maior_prio_rodando = melhor_da_fila->prioridade;
+                int valor_comparacao_melhor;
+                if (algoritmo == "PRIOP") {
+                    valor_comparacao_melhor = melhor_da_fila->prioridade;
+                }
+                else 
+                    valor_comparacao_melhor = melhor_da_fila->tempo_restante;
+
+                int pior_valor_na_cpu = valor_comparacao_melhor;
 
                 for (int i = 0; i < qtde_cpus; i++) {
-                    if (cpus[i]->prioridade > maior_prio_rodando) {
-                        maior_prio_rodando = cpus[i]->prioridade;
+                    int valor_atual_cpu = (algoritmo == "PRIOP") ? cpus[i]->prioridade : cpus[i]->tempo_restante;
+                    
+                    //expulsa o pior para entrada da nova tarefa
+                    if (valor_atual_cpu > pior_valor_na_cpu) {
+                        pior_valor_na_cpu = valor_atual_cpu;
                         pior_cpu_idx = i;
                     }
                 }
 
                 if (pior_cpu_idx != -1) {
-                    std::cout << "[Tick " << clock_global << "] PREEMPCAO: T" << melhor_da_fila->id 
+                    std::cout << "[Tick " << clock_global << "] PREEMPCAO (" << algoritmo << "): T" << melhor_da_fila->id 
                               << " expulsou T" << cpus[pior_cpu_idx]->id << " da CPU " << pior_cpu_idx + 1 << "\n";
                     
+                    //troca de contexto - salva fila e carrega nova
                     cpus[pior_cpu_idx]->estado = Estado::PRONTA;
-                    fila_prontos.push_back(cpus[pior_cpu_idx]); // Antiga volta pra fila
-                    
-                    cpus[pior_cpu_idx] = melhor_da_fila; // Nova assume
+                    fila_prontos.push_back(cpus[pior_cpu_idx]);
+
+                    cpus[pior_cpu_idx] = melhor_da_fila;
                     cpus[pior_cpu_idx]->estado = Estado::EXECUTANDO;
                     fila_prontos.erase(fila_prontos.begin() + melhor_idx);
                     mudanca_na_fila = true;
@@ -161,7 +180,7 @@ int main() {
             }
         }
 
-        // 3- Processa o tempo nas CPUs
+        //Processa o tempo nas CPUs
         bool alguma_cpu_trabalhando = false;
         for (int i = 0; i < qtde_cpus; i++) {
             if (cpus[i] != nullptr) {
@@ -169,6 +188,7 @@ int main() {
                 std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " executando T" << cpus[i]->id 
                           << " (Faltam: " << --cpus[i]->tempo_restante << ")\n";
 
+                //verifica se o processo terminou
                 if (cpus[i]->tempo_restante <= 0) {
                     cpus[i]->estado = Estado::TERMINADA;
                     std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " finalizou T" << cpus[i]->id << "\n";
@@ -178,6 +198,7 @@ int main() {
             }
         }
 
+        //verifica se o sistema esta ocioso
         if (!alguma_cpu_trabalhando && fila_prontos.empty() && tarefas_concluidas < total_tarefas) {
             std::cout << "[Tick " << clock_global << "] Sistema Ocioso...\n";
         }
