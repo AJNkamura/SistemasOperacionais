@@ -4,11 +4,11 @@
 #include <sstream>
 #include <vector>
 #include "TCB.h" 
+#include <ctime>
 #include <queue>
 
 int main() {
-
-    /* teste - cria tarefa e clock (1 tarefa)
+    /* teste - cria tarefa e clock (1 tarefa 1 cpu)
     int clock_global = 0;
     TCB tarefaTeste(1, "FF0000", 0, 10, 3);
     teste criacao ok
@@ -28,22 +28,21 @@ int main() {
         clock_global++;
     }
     */
-
-    std::string arquivo_tarefas = "tarefas_SRTF.txt";
     
-    //abrir arquivo txt
-    std::ifstream arquivo(arquivo_tarefas);
-    if (!arquivo.is_open()) {
-        std::cerr << "Erro ao abrir tarefas" << std::endl;
-        return 1;
-    }
-
+    srand(time(NULL)); //para sorteio em empate
+    std::string arquivo_tarefas = "teste_desempate_PRIOP.txt";
     std::string linha;
     std::vector<TCB> lista_tarefas;
     std::string algoritmo;
     int quantum = 0;
     int qtde_cpus = 0;
 
+    //abrir arquivo txt
+    std::ifstream arquivo(arquivo_tarefas);
+    if (!arquivo.is_open()) {
+        std::cerr << "Erro ao abrir tarefas" << std::endl;
+        return 1;
+    }
 
     //ler txt
     if (std::getline(arquivo, linha)) {
@@ -57,7 +56,7 @@ int main() {
         quantum = std::stoi(s_quantum);
         qtde_cpus = std::stoi(s_cpus);
 
-        std::cout << "Leitura ok: " << algoritmo << " | Quantum: " << quantum << " | CPUs: " << qtde_cpus << std::endl;
+        std::cout << "Algoritmo: " << algoritmo << " | Quantum: " << quantum << " | CPUs: " << qtde_cpus << std::endl;
     }
 
 
@@ -86,14 +85,14 @@ int main() {
     arquivo.close();   
     
     
-// --- Implement PRIOP pu SRTF ---
+// --- Implementa escolanamento ---
     std::vector<TCB*> fila_prontos; //vetor de prontos
     int clock_global = 0;
     int tarefas_concluidas = 0;
     int total_tarefas = lista_tarefas.size();
     std::vector<TCB*> cpus(qtde_cpus, nullptr); //vetor de CPU
     
-    //Loop principal
+    //Loop execucao
     while (tarefas_concluidas < total_tarefas) {
         //Verifica novos ingressos: mover tarefas do vetor para a fila de prontos
         for (size_t i = 0; i < lista_tarefas.size(); i++) {
@@ -103,27 +102,51 @@ int main() {
                 std::cout << "[Tick " << clock_global << "] Tarefa " << lista_tarefas[i].id << " ingressou.\n";
             }
         }
-
-            /* teste PRIOP - menor prioridade
-            int melhor_idx = 0;
-            for (size_t j = 1; j < fila_prontos.size(); j++) {
-                if (fila_prontos[j]->prioridade < fila_prontos[melhor_idx]->prioridade) {
-                    melhor_idx = j;
-                }
-            */
         
-            bool mudanca_na_fila = true;
-            while (!fila_prontos.empty() && mudanca_na_fila) {
-                 mudanca_na_fila = false;
+        bool mudanca_na_fila = true;
+        while (!fila_prontos.empty() && mudanca_na_fila) {
+            mudanca_na_fila = false;
 
-           // Achar a melhor tarefa baseado no algoritmo escolhido
+            // Achar a melhor tarefa baseado no algoritmo escolhido
             int melhor_idx = 0;
             for (size_t j = 1; j < fila_prontos.size(); j++) {
+                TCB* candidata = fila_prontos[j];
+                TCB* atual_melhor = fila_prontos[melhor_idx];
+                bool trocar = false;
+                bool empate = false;
+
+                // Criterio algoritmo 
                 if (algoritmo == "PRIOP") {
-                    if (fila_prontos[j]->prioridade < fila_prontos[melhor_idx]->prioridade) melhor_idx = j;
-                } else if (algoritmo == "SRTF") {
-                    if (fila_prontos[j]->tempo_restante < fila_prontos[melhor_idx]->tempo_restante) melhor_idx = j;
+                    if (candidata->prioridade < atual_melhor->prioridade) {
+                        trocar = true; 
+                    }
+                    else if (candidata->prioridade == atual_melhor->prioridade) {
+                        empate = true;
+                    }
                 }
+                else if (algoritmo == "SRTF") {
+                    if (candidata->tempo_restante < atual_melhor->tempo_restante) { 
+                        trocar = true;
+                    }
+                    else if (candidata->tempo_restante == atual_melhor->tempo_restante) {
+                        empate = true;
+                    }
+                }
+
+                // Criterio desempate
+                if (empate) {
+                    //quem chegou primeiro
+                    if (candidata->tempo_ingresso < atual_melhor->tempo_ingresso) trocar = true;
+                    else if (candidata->tempo_ingresso == atual_melhor->tempo_ingresso) {
+                        // menor duracao original
+                        if (candidata->duracao_original < atual_melhor->duracao_original) trocar = true;
+                        else if (candidata->duracao_original == atual_melhor->duracao_original) {
+                            //sorteio
+                            if (rand() % 2 == 0) trocar = true;
+                        }
+                    }
+                }
+                if (trocar) melhor_idx = j;
             }
 
             TCB* melhor_da_fila = fila_prontos[melhor_idx];
@@ -149,8 +172,9 @@ int main() {
                 if (algoritmo == "PRIOP") {
                     valor_comparacao_melhor = melhor_da_fila->prioridade;
                 }
-                else 
+                else {
                     valor_comparacao_melhor = melhor_da_fila->tempo_restante;
+                }
 
                 int pior_valor_na_cpu = valor_comparacao_melhor;
 
@@ -204,7 +228,7 @@ int main() {
         }
 
         clock_global++;
-        if (clock_global > 500) break; 
+        if (clock_global > 1000) break; 
     }
 
     std::cout << "\nSimulacao concluida no tick " << clock_global << "!\n";

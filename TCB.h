@@ -12,11 +12,12 @@ public:
     std::string cor_hex;
     int tempo_ingresso;
     int tempo_duracao;
+    int duracao_original;
     int tempo_restante;
     int prioridade;
     Estado estado;
 
-    TCB(int id, std::string cor, int ingresso, int duracao, int prioridade);
+    TCB(int id, std::string cor, int ingresso, int duracao, int prio);
 };
 
 #endif
