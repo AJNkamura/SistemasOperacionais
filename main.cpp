@@ -29,19 +29,21 @@ int main() {
     }
     */
 
+    std::string arquivo_tarefas = "tarefas_complexas.txt";
+    
     //abrir arquivo txt
-    std::ifstream arquivo("tarefasTeste.txt");
+    std::ifstream arquivo(arquivo_tarefas);
     if (!arquivo.is_open()) {
-        std::cerr << "Erro ao abrir tarefasTeste.txt" << std::endl;
+        std::cerr << "Erro ao abrir tarefas_complexas.txt" << std::endl;
         return 1;
     }
 
     std::string linha;
     std::vector<TCB> lista_tarefas;
-
     std::string algoritmo;
     int quantum = 0;
     int qtde_cpus = 0;
+
 
     //ler txt
     if (std::getline(arquivo, linha)) {
@@ -84,38 +86,82 @@ int main() {
     arquivo.close();   
     
     
-std::queue<TCB*> fila_prontos; 
+// --- LÓGICA DE SIMULAÇÃO (PRIOP COM BUSCA MANUAL) ---
+    std::vector<TCB*> fila_prontos;
     int clock_global = 0;
     int tarefas_concluidas = 0;
     int total_tarefas = lista_tarefas.size();
-
-    // vetor de CPUs 
     std::vector<TCB*> cpus(qtde_cpus, nullptr);
 
-    std::cout << "\nIniciando Simulacao com " << qtde_cpus << " CPUs...\n";
+    std::cout << "\nIniciando Simulacao PRIOP com " << qtde_cpus << " CPUs...\n";
     
     while (tarefas_concluidas < total_tarefas) {
         
-        //verifica novos ingressos 
+        // 1- Verifica novos ingressos 
         for (size_t i = 0; i < lista_tarefas.size(); i++) {
             if (lista_tarefas[i].tempo_ingresso == clock_global && lista_tarefas[i].estado == Estado::NOVO) {
                 lista_tarefas[i].estado = Estado::PRONTA;
-                fila_prontos.push(&lista_tarefas[i]);
+                fila_prontos.push_back(&lista_tarefas[i]);
                 std::cout << "[Tick " << clock_global << "] Tarefa " << lista_tarefas[i].id << " ingressou.\n";
             }
         }
 
-        // distribuir tarefas para CPUs ociosas
-        for (int i = 0; i < qtde_cpus; i++) {
-            if (cpus[i] == nullptr && !fila_prontos.empty()) {
-                cpus[i] = fila_prontos.front();
-                fila_prontos.pop();
-                cpus[i]->estado = Estado::EXECUTANDO;
-                std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " assumiu Tarefa " << cpus[i]->id << "\n";
+        // 2- Alocação e Preempção
+        bool mudanca_na_fila = true;
+        while (!fila_prontos.empty() && mudanca_na_fila) {
+            mudanca_na_fila = false;
+
+            // Achar menor prioridade
+            int melhor_idx = 0;
+            for (size_t j = 1; j < fila_prontos.size(); j++) {
+                if (fila_prontos[j]->prioridade < fila_prontos[melhor_idx]->prioridade) {
+                    melhor_idx = j;
+                }
+            }
+            TCB* melhor_da_fila = fila_prontos[melhor_idx];
+
+            // Tentar CPU vazia
+            bool alocou = false;
+            for (int i = 0; i < qtde_cpus; i++) {
+                if (cpus[i] == nullptr) {
+                    cpus[i] = melhor_da_fila;
+                    cpus[i]->estado = Estado::EXECUTANDO;
+                    fila_prontos.erase(fila_prontos.begin() + melhor_idx);
+                    std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " assumiu T" << cpus[i]->id << "\n";
+                    alocou = true;
+                    mudanca_na_fila = true;
+                    break;
+                }
+            }
+
+            // Sem CPU vazia -> tenta Preemp
+            if (!alocou) {
+                int pior_cpu_idx = -1;
+                int maior_prio_rodando = melhor_da_fila->prioridade;
+
+                for (int i = 0; i < qtde_cpus; i++) {
+                    if (cpus[i]->prioridade > maior_prio_rodando) {
+                        maior_prio_rodando = cpus[i]->prioridade;
+                        pior_cpu_idx = i;
+                    }
+                }
+
+                if (pior_cpu_idx != -1) {
+                    std::cout << "[Tick " << clock_global << "] PREEMPCAO: T" << melhor_da_fila->id 
+                              << " expulsou T" << cpus[pior_cpu_idx]->id << " da CPU " << pior_cpu_idx + 1 << "\n";
+                    
+                    cpus[pior_cpu_idx]->estado = Estado::PRONTA;
+                    fila_prontos.push_back(cpus[pior_cpu_idx]); // Antiga volta pra fila
+                    
+                    cpus[pior_cpu_idx] = melhor_da_fila; // Nova assume
+                    cpus[pior_cpu_idx]->estado = Estado::EXECUTANDO;
+                    fila_prontos.erase(fila_prontos.begin() + melhor_idx);
+                    mudanca_na_fila = true;
+                }
             }
         }
 
-        //processa o tempo em cada CPU
+        // 3- Processa o tempo nas CPUs
         bool alguma_cpu_trabalhando = false;
         for (int i = 0; i < qtde_cpus; i++) {
             if (cpus[i] != nullptr) {
@@ -123,25 +169,23 @@ std::queue<TCB*> fila_prontos;
                 std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " executando T" << cpus[i]->id 
                           << " (Faltam: " << --cpus[i]->tempo_restante << ")\n";
 
-                // Se a tarefa acabou nesta CPU
                 if (cpus[i]->tempo_restante <= 0) {
                     cpus[i]->estado = Estado::TERMINADA;
-                    std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " finalizou Tarefa " << cpus[i]->id << "\n";
-                    cpus[i] = nullptr; // libera a CPU para o próximo tick
+                    std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " finalizou T" << cpus[i]->id << "\n";
+                    cpus[i] = nullptr; 
                     tarefas_concluidas++;
                 }
             }
         }
 
         if (!alguma_cpu_trabalhando && fila_prontos.empty() && tarefas_concluidas < total_tarefas) {
-            std::cout << "[Tick " << clock_global << "] Todas as CPUs ociosas...\n";
+            std::cout << "[Tick " << clock_global << "] Sistema Ocioso...\n";
         }
 
         clock_global++;
-        if (clock_global > 300) break; //limite
+        if (clock_global > 500) break; 
     }
 
     std::cout << "\nSimulacao concluida no tick " << clock_global << "!\n";
     return 0;
 }
-
