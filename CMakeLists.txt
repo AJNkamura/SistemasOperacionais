@@ -11,13 +11,17 @@ set(CMAKE_AUTORCC ON)
 # Encontra as bibliotecas do Qt6 (Se usar Qt5, mude de Qt6 para Qt5 aqui e abaixo)
 find_package(Qt5 REQUIRED COMPONENTS Widgets Core Gui)
 
-include_directories(
-    include/
-)
-
 add_executable(SimuladorSO
     src/main.cpp
     src/TCB.cpp
+    src/SimCore.cpp
+    src/MainWindow.cpp
+)
+
+target_include_directories(SimuladorSO PRIVATE include/)
+
+set_target_properties(SimuladorSO PROPERTIES
+    AUTOMOC_MOC_OPTIONS "-I${CMAKE_SOURCE_DIR}/include"
 )
 
 target_link_libraries(SimuladorSO PRIVATE Qt5::Widgets Qt5::Core Qt5::Gui)
