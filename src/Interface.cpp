@@ -9,6 +9,7 @@
 #include <QPainter>
 #include <QStatusBar>
 #include <QHeaderView>
+#include <map>
 
 Interface::Interface(QWidget *parent) : QMainWindow(parent) {
     //Constroi interface
@@ -204,9 +205,33 @@ void Interface::desenharGantt() {
         return "#DDDDDD";
     };
 
+    // Renderização global dos ícones de ingresso
+    std::map<int, std::vector<int>> chegadas_por_tick;
+    for (const auto& t : core.lista_tarefas) {
+        if (t.tempo_ingresso <= core.clock_global) {
+            chegadas_por_tick[t.tempo_ingresso].push_back(t.id);
+        }
+    }
+
+    for (const auto& par : chegadas_por_tick) {
+        int tick = par.first;
+        int x = tick * T_WIDTH;
+        
+        QString textoChegada = "▶️ ";
+        for (size_t i = 0; i < par.second.size(); ++i) {
+            textoChegada += QString("T%1").arg(par.second[i]);
+            if (i < par.second.size() - 1) textoChegada += ", ";
+        }
+        
+        QGraphicsTextItem* iconeChegada = cenaGantt->addText(textoChegada);
+        iconeChegada->setPos(x, -40);
+        iconeChegada->setDefaultTextColor(Qt::darkBlue);
+        iconeChegada->setZValue(10);
+    }
+
     // Desenhar as tarefas conforme o histórico de fotos
     for (const auto& snap : core.historico) {
-        //  o bloco se posiciona exatamente a partir de seu respectivo clock
+        // o bloco se posiciona exatamente a partir de seu respectivo clock
         int x = snap.clock_global * T_WIDTH;
         
         for (int c = 0; c < core.qtde_cpus && c < (int)snap.ids_task_cpu.size(); ++c) {
@@ -229,21 +254,43 @@ void Interface::desenharGantt() {
                 QGraphicsRectItem* rect = cenaGantt->addRect(x, c * CPU_HEIGHT, T_WIDTH, CPU_HEIGHT - 10);
                 rect->setBrush(corFundo);
                 rect->setPen(QPen(Qt::black));
+                rect->setZValue(0); 
                 
                 QGraphicsTextItem* texto = cenaGantt->addText(QString("T%1").arg(tid));
                 texto->setPos(x + 2, c * CPU_HEIGHT + 2);
                 texto->setDefaultTextColor((estado_na_foto == Estado::SUSPENSA) ? Qt::white : Qt::black);
+                texto->setZValue(1); 
+
+                // Ícone de Sorteio (Dado)
+                if (std::find(snap.ids_sorteio.begin(), snap.ids_sorteio.end(), tid) != snap.ids_sorteio.end()) {
+                    bool inicio_de_bloco = true;
+                    if (snap.clock_global > 0) {
+                        for (const auto& prev_snap : core.historico) {
+                            if (prev_snap.clock_global == snap.clock_global - 1) {
+                                for (int prev_tid : prev_snap.ids_task_cpu) {
+                                    if (prev_tid == tid) {
+                                        inicio_de_bloco = false;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (inicio_de_bloco) {
+                        QGraphicsTextItem* iconeSorteio = cenaGantt->addText("🎲");
+                        iconeSorteio->setPos(x + 10, c * CPU_HEIGHT - 5); 
+                        iconeSorteio->setZValue(10);
+                    }
+                }
 
                 // Icones de entrada e saida
                 for(const auto& t : snap.lista_tarefas) {
                     if(t.id == tid) {
-                        if (snap.clock_global == t.tempo_ingresso) {
-                            QGraphicsTextItem* iconeChegada = cenaGantt->addText("▶️");
-                            iconeChegada->setPos(x + 10, c * CPU_HEIGHT - 15);
-                        }
                         if (t_restante_na_foto == 0) {
                             QGraphicsTextItem* iconeFim = cenaGantt->addText("📍");
                             iconeFim->setPos(x + 10, c * CPU_HEIGHT + 15);
+                            iconeFim->setZValue(10); 
                         }
                     }
                 }
@@ -253,7 +300,8 @@ void Interface::desenharGantt() {
     
     //Ponteiro vermelho da linha do tempo
     int x_linha = core.clock_global * T_WIDTH;
-    cenaGantt->addLine(x_linha, 0, x_linha, core.qtde_cpus * CPU_HEIGHT, QPen(Qt::red, 2));
+    QGraphicsLineItem* linhaPointer = cenaGantt->addLine(x_linha, 0, x_linha, core.qtde_cpus * CPU_HEIGHT, QPen(Qt::red, 2));
+    linhaPointer->setZValue(20); 
 }
 
 void Interface::btnEdicao() {
