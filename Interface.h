@@ -1,5 +1,5 @@
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#ifndef INTERFACE_H
+#define INTERFACE_H
 
 #include <QMainWindow>
 #include <QGraphicsView>
@@ -7,12 +7,14 @@
 #include <QPushButton>
 #include <QTableWidget>
 #include <QTimer>
-#include "SimCore.h"
+#include "Escalonador.h"
 
-class MainWindow : public QMainWindow {
+class Escalonador;
+
+class Interface : public QMainWindow {
     Q_OBJECT
 public:
-    MainWindow(QWidget *parent = nullptr);
+    Interface(QWidget *parent = nullptr);
 
 private slots:
     void btnCarregarClicado();
@@ -23,17 +25,19 @@ private slots:
     void tickAutomatico();
 
 private:
-    CoreSimulacao core;
+    Escalonador core;
     QTimer *timerPlay;
 
-    // Elementos da UI
+
     QGraphicsView *viewGantt;
     QGraphicsScene *cenaGantt;
     QTableWidget *tabelaTarefas;
     QPushButton *btnPlay;
+    QPushButton* btnAplicarEdicao;
 
     void atualizarUI();
     void desenharGantt();
+    void btnEdicao();
 };
 
 #endif

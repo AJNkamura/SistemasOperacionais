@@ -1,5 +1,5 @@
-#ifndef SIMCORE_H
-#define SIMCORE_H
+#ifndef ESCALONADOR_H
+#define ESCALONADOR_H
 
 #include <vector>
 #include <string>
