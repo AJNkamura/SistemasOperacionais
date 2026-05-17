@@ -1,10 +1,12 @@
 #include <QApplication>
-#include "include/Interface.h" // Aponta para a pasta correta
+#include "Interface.h"
 
-int main(int argc, char *argv[]) {       
-    QApplication app(argc, argv);        
-    Escalonador window; 
-    window.setWindowTitle("Simulador de Escalonamento SO");
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
+
+    Interface window;
+    window.setWindowTitle("Simulador de Escalonamento Multiprocessado");
     window.show();
-    return app.exec(); 
+
+    return app.exec();
 }

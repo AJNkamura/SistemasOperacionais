@@ -14,13 +14,15 @@ struct Snapshot {
     std::vector<int> ids_fila_prontos;  // Quais IDs estavam na fila
 };
 
-class CoreSimulacao {
+class Escalonador {
 public:
     int clock_global = 0;
     int tarefas_concluidas = 0;
     int qtde_cpus = 0;
     int quantum = 0;
+    int tempo_ocioso = 0;
     std::string algoritmo;
+
 
     std::vector<TCB> lista_tarefas;
     std::vector<TCB*> cpus;
