@@ -204,11 +204,9 @@ void Interface::desenharGantt() {
         return "#DDDDDD";
     };
 
-    // ------------------------------------------------------------------------
-    // DESENHAR HISTÓRICO CONSOLIDADO
-    // ------------------------------------------------------------------------
+    // Desenhar as tarefas conforme o histórico de fotos
     for (const auto& snap : core.historico) {
-        // Alinhamento cravado: o bloco se posiciona exatamente a partir de seu respectivo clock
+        //  o bloco se posiciona exatamente a partir de seu respectivo clock
         int x = snap.clock_global * T_WIDTH;
         
         for (int c = 0; c < core.qtde_cpus && c < (int)snap.ids_task_cpu.size(); ++c) {
@@ -236,15 +234,15 @@ void Interface::desenharGantt() {
                 texto->setPos(x + 2, c * CPU_HEIGHT + 2);
                 texto->setDefaultTextColor((estado_na_foto == Estado::SUSPENSA) ? Qt::white : Qt::black);
 
-                // Iconografia de eventos
+                // Icones de entrada e saida
                 for(const auto& t : snap.lista_tarefas) {
                     if(t.id == tid) {
                         if (snap.clock_global == t.tempo_ingresso) {
-                            QGraphicsTextItem* iconeChegada = cenaGantt->addText("📥");
+                            QGraphicsTextItem* iconeChegada = cenaGantt->addText("▶️");
                             iconeChegada->setPos(x + 10, c * CPU_HEIGHT - 15);
                         }
                         if (t_restante_na_foto == 0) {
-                            QGraphicsTextItem* iconeFim = cenaGantt->addText("🏁");
+                            QGraphicsTextItem* iconeFim = cenaGantt->addText("📍");
                             iconeFim->setPos(x + 10, c * CPU_HEIGHT + 15);
                         }
                     }
@@ -253,9 +251,7 @@ void Interface::desenharGantt() {
         }
     }
     
-    // ------------------------------------------------------------------------
-    // DESENHAR PONTEIRO DA LINHA DO TEMPO (LINHA VERMELHA)
-    // ------------------------------------------------------------------------
+    //Ponteiro vermelho da linha do tempo
     int x_linha = core.clock_global * T_WIDTH;
     cenaGantt->addLine(x_linha, 0, x_linha, core.qtde_cpus * CPU_HEIGHT, QPen(Qt::red, 2));
 }

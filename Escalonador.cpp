@@ -4,7 +4,7 @@
 #include <iostream>
 #include <algorithm>
 
-// Remove espaços em branco
+// Remove espacos em branco
 static std::string trim(const std::string& s) {
     size_t start = s.find_first_not_of(" \t\r\n");
     size_t end   = s.find_last_not_of(" \t\r\n");
@@ -126,11 +126,9 @@ void Escalonador::retrocederTick() {
     historico.pop_back();
 }
 
-// Logica de Avanço de Tick
+ // -- Avanço de Tick -- // 
 void Escalonador::avancarTick() {
-    // ------------------------------------------------------------------------
-    // PASSO 0: Validação de Fim Real
-    // ------------------------------------------------------------------------
+    // Verifica se ainda tem tarefas para processar ou se as CPUs estao vazias
     if (tarefas_concluidas >= (int)lista_tarefas.size()) {
         bool cpus_realmente_vazias = true;
         for (int i = 0; i < qtde_cpus; i++) {
@@ -143,10 +141,7 @@ void Escalonador::avancarTick() {
     }
 
     int total_tarefas = lista_tarefas.size();
-
-    // ------------------------------------------------------------------------
-    // PASSO 1: Verificar e incluir novas tarefas que ingressaram neste tick
-    // ------------------------------------------------------------------------
+    // Verificar e incluir novas tarefas que ingressaram neste tick
     for (size_t i = 0; i < lista_tarefas.size(); i++) {
         if (lista_tarefas[i].tempo_ingresso == clock_global && lista_tarefas[i].estado == Estado::NOVO) {
             lista_tarefas[i].estado = Estado::PRONTA;
@@ -164,13 +159,13 @@ void Escalonador::avancarTick() {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // PASSO 2: Escalonamento e Preempção (Tomada de Decisão)
-    // ------------------------------------------------------------------------
+    // ----- Escalonamento e Preempção ------ //
+    // Controle para repetir a busca se houver alteração na fila de prontos -> garantir que as mudanças sejam refletidas imediatamente
     bool mudanca_na_fila = true;
     while (!fila_prontos.empty() && mudanca_na_fila) {
         mudanca_na_fila = false;
 
+    //Escolher a melhor tarefa da fila de prontos de acordo com o algoritmo e critérios de desempate
         int melhor_idx = 0;
         for (size_t j = 1; j < fila_prontos.size(); j++) {
             TCB* candidata = fila_prontos[j];
@@ -178,15 +173,19 @@ void Escalonador::avancarTick() {
             bool trocar = false;
             bool empate = false;
 
+            //criterio PRIOP: maior prioridade 
             if (algoritmo == "PRIOP") {
                 if (candidata->prioridade > atual_melhor->prioridade) trocar = true; 
                 else if (candidata->prioridade == atual_melhor->prioridade) empate = true;
             }
+            //criterio SRTF: menor tempo restante
             else if (algoritmo == "SRTF") {
                 if (candidata->tempo_restante < atual_melhor->tempo_restante) trocar = true;
                 else if (candidata->tempo_restante == atual_melhor->tempo_restante) empate = true;
             }
 
+            // ---- Casos de empate ----- //
+            //criterio de desempate 01: quem já está executando ganha 
             if (empate) {
                 bool cand_exec = (candidata->estado == Estado::EXECUTANDO);
                 bool atual_melhor_exec = (atual_melhor->estado == Estado::EXECUTANDO); 
@@ -194,22 +193,30 @@ void Escalonador::avancarTick() {
                 if (cand_exec && !atual_melhor_exec) trocar = true;
                 else if (!cand_exec && atual_melhor_exec) empate = false;
             }
-        
+
             if (empate) {
+                // criterio de desempate 02: quem entrou primeiro ganha 
                 if (candidata->tempo_ingresso < atual_melhor->tempo_ingresso) trocar = true;
                 else if (candidata->tempo_ingresso == atual_melhor->tempo_ingresso) {
+                    
+                    // criterio de desempate 03: quem tem menor duracao original ganha 
                     if (candidata->duracao_original < atual_melhor->duracao_original) trocar = true;
                     else if (candidata->duracao_original == atual_melhor->duracao_original) {
-                        if (candidata->id < atual_melhor->id) trocar = true;
+                        
+                        //criterio de desempate 04: desempate aleatório 
+                        if (std::rand() % 2 == 1) {
+                            trocar = true;
+                        }
                     }
                 }
             }
+            
             if (trocar) melhor_idx = j;
         }
 
         TCB* melhor_da_fila = fila_prontos[melhor_idx];
 
-        // Evita clonar a mesma tarefa em duas CPUs distintas
+        // Resolver o problema de clonar a mesma tarefa em duas CPUs distintas
         bool ja_alocada = false;
         for (int i = 0; i < qtde_cpus; i++) {
             if (cpus[i] != nullptr && cpus[i]->id == melhor_da_fila->id) {
@@ -217,8 +224,9 @@ void Escalonador::avancarTick() {
             }
         }
 
+        // ---- Alocacao -----//
         bool alocou = false;
-        // 1. Tenta alocar em CPU livre
+        // Tenta alocar em CPU livre
         for (int i = 0; i < qtde_cpus; i++) {
             if (cpus[i] == nullptr) {
                 if (!ja_alocada) {
@@ -233,19 +241,23 @@ void Escalonador::avancarTick() {
             }
         }
 
-        // 2. Se as CPUs estão cheias, tenta a preempção
+        // Se as CPUs estão cheias, tenta a preempção
         if (!alocou) {
             int pior_cpu_idx = -1;
+            // Cenario PRIOP
             if (algoritmo == "PRIOP") {
                 int menor_prio = melhor_da_fila->prioridade;
+                // Varre as CPUs para encontrar quem está rodando com prioridade menor que a da nova tarefa
                 for (int i = 0; i < qtde_cpus; i++) {
                     if (cpus[i] != nullptr && cpus[i]->prioridade < menor_prio) {
                         menor_prio = cpus[i]->prioridade; pior_cpu_idx = i;
                     }
                 }
             }
+            // Cenário SRTF
             else if (algoritmo == "SRTF") {
                 int maior_restante = melhor_da_fila->tempo_restante;
+                // Varre as CPUs para encontrar quem tem um tempo de execução restante maior que o tempo total da nova tarefa
                 for (int i = 0; i < qtde_cpus; i++) {
                     if (cpus[i] != nullptr && cpus[i]->tempo_restante > maior_restante) {
                         maior_restante = cpus[i]->tempo_restante; pior_cpu_idx = i;
@@ -253,17 +265,20 @@ void Escalonador::avancarTick() {
                 }
             }
 
+            // Se uma CPU passível de preempção foi encontrada, executa a troca de contexto
             if (pior_cpu_idx != -1) {
                 TCB* expulsa = cpus[pior_cpu_idx];
                 expulsa->estado = Estado::PRONTA;
                 
-                fila_prontos.erase(fila_prontos.begin() + melhor_idx);
-                if (std::find(fila_prontos.begin(), fila_prontos.end(), expulsa) == fila_prontos.end()) {
+                fila_prontos.erase(fila_prontos.begin() + melhor_idx); // Remove a tarefa eleita da sua posição original na fila de prontos
+                if (std::find(fila_prontos.begin(), fila_prontos.end(), expulsa) == fila_prontos.end()) { // Remove a tarefa eleita da sua posição original na fila de prontos
                     fila_prontos.push_back(expulsa);
                 }
                 
+                // Aloca a nova tarefa na CPU liberada e atualiza seu bloco de controle
                 cpus[pior_cpu_idx] = melhor_da_fila;
                 cpus[pior_cpu_idx]->estado = Estado::EXECUTANDO;
+
                 mudanca_na_fila = true;
             }
         }
@@ -276,46 +291,46 @@ void Escalonador::avancarTick() {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // PASSO 3: Consumo de Tempo (Controle de Ticks de Processamento e Ociosidade)
-    // ------------------------------------------------------------------------
+    // ----  Controle de ticks ---- //
     bool alguma_cpu_trabalhando = false;
     std::vector<int> tarefas_processadas_neste_tick;
 
+    //Varredura para verificar o andamento das tarefas alocadas nas CPUs e verificar tempo ocioso
     for (int i = 0; i < qtde_cpus; i++) {
+        // Caso 1 - A CPU possui uma tarefa alocada e está trabalhando
         if (cpus[i] != nullptr) {
             alguma_cpu_trabalhando = true;
-            
+
+            // Resolver erros: Verifica se a tarefa atual já foi processada por outra CPU neste mesmo tick
             if (std::find(tarefas_processadas_neste_tick.begin(), tarefas_processadas_neste_tick.end(), cpus[i]->id) != tarefas_processadas_neste_tick.end()) {
                 continue; 
             }
             tarefas_processadas_neste_tick.push_back(cpus[i]->id);
 
+            // Consome 1 tick da tarefa alocada na CPU
             if (cpus[i]->tempo_restante > 0) {
                 cpus[i]->tempo_restante--;
                 std::cout << "[Tick " << clock_global << "] CPU " << i + 1 << " processando T" << cpus[i]->id 
                           << " (Restam: " << cpus[i]->tempo_restante << ")\n";
             }
         } else {
-            // Computa individualmente por CPU livre
+            // Caso 2 - CPU livre
+            //verificar se o sistema está ocioso ou se há tarefas pendentes (Incrementa o tempo ocioso acumulado só se o sistema ainda possuir tarefas pendentes que não puderam ser escalonadas)
             if (tarefas_concluidas < total_tarefas) {
                 tempo_ocioso++;
             }
         }
     }
-
+    //Todas as CPUs estejam vazias e ngm aguardando na fila de prontos
     if (!alguma_cpu_trabalhando && fila_prontos.empty() && tarefas_concluidas < total_tarefas) {
         std::cout << "[Tick " << clock_global << "] Sistema Ocioso...\n";
     }
 
-    // ------------------------------------------------------------------------
-    // PASSO 4: Registrar Snapshot imediatamente no histórico gráfico
-    // ------------------------------------------------------------------------
+    // Registrar foto do estado atual antes de avançar para o próximo tick
     historico.push_back(criarSnapshot());
 
-    // ------------------------------------------------------------------------
-    // PASSO 5: Atualizar estados e limpar CPUs concluídas para a próxima rodada
-    // ------------------------------------------------------------------------
+
+    // Verificar se alguma tarefa foi concluída neste tick e liberar a CPU correspondente
     for (int i = 0; i < qtde_cpus; i++) {
         if (cpus[i] != nullptr && cpus[i]->tempo_restante <= 0) {
             cpus[i]->tempo_restante = 0;
