@@ -17,6 +17,7 @@ struct Snapshot {
     std::vector<int> ids_sorteio; 
     std::map<int, int> mutexes_estado;
     std::vector<int> ids_quem_rodou;
+    std::map<int, std::string> eventos_ocorridos;
 };
 
 class Escalonador {

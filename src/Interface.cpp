@@ -5,10 +5,12 @@
 #include <QFileDialog>
 #include <QGraphicsRectItem>
 #include <QGraphicsTextItem>
+#include <QLabel>
 #include <QImage>
 #include <QPainter>
 #include <QStatusBar>
 #include <QHeaderView>
+#include <QScrollArea>
 #include <map>
 
 Interface::Interface(QWidget *parent) : QMainWindow(parent) {
@@ -22,6 +24,7 @@ Interface::Interface(QWidget *parent) : QMainWindow(parent) {
     
     cenaGantt = new QGraphicsScene(this);
     viewGantt = new QGraphicsView(cenaGantt);
+    viewGantt->setAlignment(Qt::AlignTop | Qt::AlignLeft); 
     leftLayout->addWidget(viewGantt);
 
     QHBoxLayout *botoesLayout = new QHBoxLayout();
@@ -48,14 +51,29 @@ Interface::Interface(QWidget *parent) : QMainWindow(parent) {
     tabelaTarefas->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     tabelaTarefas->setEditTriggers(QAbstractItemView::DoubleClicked); 
     
-    btnAplicarEdicao = new QPushButton("Aplicar mudança na Tabela"); 
+    QLabel* textLegenda = new QLabel();
+    textLegenda->setTextFormat(Qt::RichText);
+    textLegenda->setWordWrap(true);
+    textLegenda->setFixedHeight(125);
+    textLegenda->setStyleSheet("background-color: #fcfcfc; border: 1px solid #ccc; font-size: 13px; padding: 6px; border-radius: 4px;");
+    textLegenda->setText(
+        "<b style='color: #333;'>Legenda de Eventos e Gráficos:</b><br>"
+        "▶️ <b>Ingresso:</b> Tarefa chegou | 📍 <b>Término:</b> Fim da execução | 🎲 <b>Sorteio:</b> Desempate<br>"
+        "⬇️ <b>Mutex Lock (P):</b> Obteve recurso | ⬆️ <b>Mutex Unlock (V):</b> Liberou recurso<br>"
+        "⛔ <b>Mutex Block:</b> Suspensa (ocupado) | 💿 <b>I/O (E/S):</b> Suspensa por disco/rede<br>"
+        "<hr style='margin: 4px 0; border: none; border-top: 1px solid #ddd;'>"
+        "<b>Blocos com ' + ' :</b> Tarefa Suspensa aguardando Mutex | <b>Blocos com ' x ' :</b> Tarefa Suspensa em E/S"
+    );
     
+    btnAplicarEdicao = new QPushButton("Aplicar mudança na Tabela"); 
+
     rightLayout->addWidget(tabelaTarefas);
+    rightLayout->addWidget(textLegenda);
     rightLayout->addWidget(btnAplicarEdicao);
 
     mainLayout->addLayout(leftLayout);
     mainLayout->addLayout(rightLayout);
-    resize(1100, 600); 
+    resize(1200, 700); 
 
     // Eventos
     connect(btnCarregar, &QPushButton::clicked, this, &Interface::btnCarregarClicado);
@@ -175,6 +193,10 @@ void Interface::desenharGantt() {
     int largura_total = max_ticks * T_WIDTH;
     int altura_total = core.qtde_cpus * CPU_HEIGHT;
 
+    int altura_cpus = core.qtde_cpus * CPU_HEIGHT;
+    int offset_suspensas = altura_cpus + 40; 
+    int altura_total_gantt = offset_suspensas + (core.lista_tarefas.size() * 30);
+
     for (int t = 0; t <= max_ticks; t++) {
         int x = t * T_WIDTH;
         
@@ -186,8 +208,6 @@ void Interface::desenharGantt() {
         numTick->setDefaultTextColor(Qt::darkGray);
     }
 
-    cenaGantt->setSceneRect(LABEL_X, -40, largura_total + abs(LABEL_X) + 50, altura_total + 80);
-
     for (int c = 0; c < core.qtde_cpus; ++c) {
         QGraphicsTextItem* cpuLabel = cenaGantt->addText(QString("CPU %1").arg(c + 1));
         cpuLabel->setPos(LABEL_X, c * CPU_HEIGHT + (CPU_HEIGHT / 4));
@@ -195,6 +215,19 @@ void Interface::desenharGantt() {
         
         QPen penRow(Qt::gray, 1, Qt::SolidLine);
         cenaGantt->addLine(0, c * CPU_HEIGHT, largura_total, c * CPU_HEIGHT, penRow);
+    }
+
+    cenaGantt->addLine(0, altura_cpus, largura_total, altura_cpus, QPen(Qt::black, 2)); 
+    QGraphicsTextItem* labelSusp = cenaGantt->addText("Tarefas Suspensas ( Padrão 'X' = E/S  |  Padrão '+' = Mutex ):");
+    labelSusp->setPos(LABEL_X, altura_cpus + 5);
+    labelSusp->setDefaultTextColor(Qt::darkRed);
+
+    for (size_t i = 0; i < core.lista_tarefas.size(); ++i) {
+        int y_row = offset_suspensas + (i * 30);
+        QGraphicsTextItem* tLabel = cenaGantt->addText(QString("T%1").arg(core.lista_tarefas[i].id));
+        tLabel->setPos(LABEL_X, y_row);
+        tLabel->setDefaultTextColor(Qt::darkGray);
+        cenaGantt->addLine(0, y_row + 25, largura_total, y_row + 25, QPen(Qt::lightGray, 1, Qt::DashLine));
     }
 
     cenaGantt->addLine(0, altura_total, largura_total, altura_total, QPen(Qt::black, 2)); 
@@ -205,6 +238,34 @@ void Interface::desenharGantt() {
             if (t.id == tid) return QString("#") + QString::fromStdString(t.cor_hex);
         }
         return "#DDDDDD";
+    };
+
+    auto drawBadge = [&](QString icones, double cx, double cy) {
+        if (icones.isEmpty()) return;
+        QGraphicsTextItem* txt = cenaGantt->addText(icones);
+        
+        QFont f = txt->font();
+        f.setPointSize(9); // Reduz um pouquinho pra caber perfeito no circulo
+        txt->setFont(f);
+        
+        double w = 24.0; // Largura suficiente para 2 ícones
+        double h = 14.0; // Altura enxuta
+        double rx = cx - (w / 2.0);
+        double ry = cy - (h / 2.0);
+        
+        // Retângulo branco com bordas totalmente arredondadas
+        QGraphicsPathItem* bg = new QGraphicsPathItem();
+        QPainterPath path;
+        path.addRoundedRect(rx, ry, w, h, h / 2.0, h / 2.0);
+        bg->setPath(path);
+        bg->setBrush(QBrush(Qt::white));
+        bg->setPen(QPen(Qt::NoPen));
+        bg->setZValue(14);
+        cenaGantt->addItem(bg);
+
+        QRectF b = txt->boundingRect();
+        txt->setPos(cx - (b.width() / 2.0), cy - (b.height() / 2.0) + 1.5);
+        txt->setZValue(15);
     };
 
     // Renderização global dos ícones de ingresso
@@ -233,10 +294,11 @@ void Interface::desenharGantt() {
 
     // Desenhar as tarefas conforme o histórico de fotos
     for (const auto& snap : core.historico) {
-        if (snap.clock_global == 0) continue; // <--- ADICIONE ESTA LINHA (Ignora a foto vazia do início)
+        if (snap.clock_global == 0) continue; 
         // o bloco se posiciona exatamente a partir de seu respectivo clock
         int x = (snap.clock_global - 1) * T_WIDTH; 
-        
+
+        //blocos das CPUs
         for (int c = 0; c < core.qtde_cpus && c < (int)snap.ids_quem_rodou.size(); ++c) {
             int tid = snap.ids_quem_rodou[c];
             if (tid != -1) {
@@ -258,44 +320,62 @@ void Interface::desenharGantt() {
                 rect->setBrush(corFundo);
                 rect->setPen(QPen(Qt::black));
                 rect->setZValue(0); 
-                
+
                 QGraphicsTextItem* texto = cenaGantt->addText(QString("T%1").arg(tid));
-                texto->setPos(x + 2, c * CPU_HEIGHT + 2);
+                texto->setPos(x + 2, c * CPU_HEIGHT -1);
                 texto->setDefaultTextColor((estado_na_foto == Estado::SUSPENSA) ? Qt::white : Qt::black);
                 texto->setZValue(1); 
 
-                // Ícone de Sorteio (Dado)
+                QString icones = "";
+                if (snap.eventos_ocorridos.count(tid)) {
+                    icones += QString::fromStdString(snap.eventos_ocorridos.at(tid));
+                }
+                
                 if (std::find(snap.ids_sorteio.begin(), snap.ids_sorteio.end(), tid) != snap.ids_sorteio.end()) {
                     bool inicio_de_bloco = true;
                     if (snap.clock_global > 0) {
                         for (const auto& prev_snap : core.historico) {
                             if (prev_snap.clock_global == snap.clock_global - 1) {
                                 for (int prev_tid : prev_snap.ids_quem_rodou) {
-                                    if (prev_tid == tid) {
-                                        inicio_de_bloco = false;
-                                        break;
-                                    }
+                                    if (prev_tid == tid) { inicio_de_bloco = false; break; }
                                 }
                             }
                         }
                     }
-
-                    if (inicio_de_bloco) {
-                        QGraphicsTextItem* iconeSorteio = cenaGantt->addText("🎲");
-                        iconeSorteio->setPos(x + 10, c * CPU_HEIGHT - 5); 
-                        iconeSorteio->setZValue(10);
-                    }
+                    if (inicio_de_bloco) icones += "🎲";
                 }
 
-                // Icones de entrada e saida
-                for(const auto& t : snap.lista_tarefas) {
-                    if(t.id == tid) {
-                        if (t_restante_na_foto == 0) {
-                            QGraphicsTextItem* iconeFim = cenaGantt->addText("📍");
-                            iconeFim->setPos(x + 10, c * CPU_HEIGHT + 15);
-                            iconeFim->setZValue(10); 
-                        }
-                    }
+                if (t_restante_na_foto == 0) icones += "📍";
+
+                // Desenha todos os ícones juntos dentro do circulo branco abaixo da label
+                drawBadge(icones, x + T_WIDTH / 2.0, c * CPU_HEIGHT + 28);
+            }
+        }
+        //suspensas
+        for (size_t i = 0; i < snap.lista_tarefas.size(); ++i) {
+            const TCB& t = snap.lista_tarefas[i];
+            if (t.estado == Estado::SUSPENSA) {
+                int y_row = offset_suspensas + (i * 30);
+                QString corStr = getCor(snap.lista_tarefas, t.id);
+                QColor corFundo(corStr);
+
+                // Define o padrão gráfico do Qt baseado no tipo de bloqueio
+                QBrush brush(corFundo);
+                if (t.io_restante > 0) {
+                    brush.setStyle(Qt::DiagCrossPattern); // Padrão X para E/S
+                } else if (t.mutex_esperado != -1) {
+                    brush.setStyle(Qt::CrossPattern); // Padrão + para Mutex
+                }
+
+                QGraphicsRectItem* rect = cenaGantt->addRect(x, y_row, T_WIDTH, 20);
+                rect->setBrush(brush);
+                rect->setPen(QPen(Qt::black));
+                rect->setZValue(0);
+
+                // Desenha o badge no centro do bloco suspenso (se o evento ocorreu agora)
+                if (snap.eventos_ocorridos.count(t.id) && std::find(snap.ids_quem_rodou.begin(), snap.ids_quem_rodou.end(), t.id) == snap.ids_quem_rodou.end()) {
+                    QString icones = QString::fromStdString(snap.eventos_ocorridos.at(t.id));
+                    drawBadge(icones, x + T_WIDTH / 2.0, y_row + 10);
                 }
             }
         }
@@ -305,6 +385,8 @@ void Interface::desenharGantt() {
     int x_linha = core.clock_global * T_WIDTH;
     QGraphicsLineItem* linhaPointer = cenaGantt->addLine(x_linha, 0, x_linha, core.qtde_cpus * CPU_HEIGHT, QPen(Qt::red, 2));
     linhaPointer->setZValue(20); 
+    int largura_final = std::max(largura_total, x_linha);
+    cenaGantt->setSceneRect(cenaGantt->itemsBoundingRect().adjusted(-50, -50, 100, 100));
 }
 
 void Interface::btnEdicao() {

@@ -219,7 +219,14 @@ void Escalonador::avancarTick() {
             //criterio PRIOP: maior prioridade 
             if (algoritmo == "PRIOP" || algoritmo == "PRIOPENV") {
                 if (candidata->prioridade_dinamica > atual_melhor->prioridade_dinamica) { trocar = true; id_ganhou_sorteio = -1; }
-                else if (candidata->prioridade_dinamica == atual_melhor->prioridade_dinamica) empate = true;
+                else if (candidata->prioridade_dinamica == atual_melhor->prioridade_dinamica) {
+                    if (candidata->prioridade_estatica > atual_melhor->prioridade_estatica) {
+                        trocar = true; id_ganhou_sorteio = -1;
+                    } 
+                    else if (candidata->prioridade_estatica == atual_melhor->prioridade_estatica) {
+                        empate = true; // Se a estática também empatar, segue pros próximos critérios!
+                    }
+                }
             }
             //criterio SRTF: menor tempo restante
             else if (algoritmo == "SRTF") {
@@ -328,6 +335,8 @@ void Escalonador::avancarTick() {
         if (t->estado == Estado::EXECUTANDO) t->estado = Estado::PRONTA;
     }
 
+    std::map<int, std::string> eventos_neste_tick;
+
     for (int i = 0; i < qtde_cpus; i++) {
         TCB* t = cpus[i];
         if (t != nullptr) {
@@ -339,12 +348,14 @@ void Escalonador::avancarTick() {
                         if (mutexes.find(ev.recurso_id) == mutexes.end() || mutexes[ev.recurso_id] == -1 || mutexes[ev.recurso_id] == t->id) {
                             mutexes[ev.recurso_id] = t->id; // Pegou o Mutex! Continua rodando.
                             ev.concluido = true;
+                            eventos_neste_tick[t->id] += "⬇️";
                         } else {
                             // Mutex ocupado! Fica suspensa e sai da CPU.
                             t->estado = Estado::SUSPENSA;
                             t->mutex_esperado = ev.recurso_id;
                             t->quantum_usado = 0;
                             cpus[i] = nullptr; 
+                            eventos_neste_tick[t->id] += "⛔";
                             break;
                         }
                     }
@@ -353,7 +364,7 @@ void Escalonador::avancarTick() {
                         if (mutexes[ev.recurso_id] == t->id) {
                             mutexes[ev.recurso_id] = -1; // Liberou!
                             ev.concluido = true;
-
+                            eventos_neste_tick[t->id] += "⬆️";
                             // Acorda quem tava esperando por esse Mutex (vai pra fila de prontos)
                             for (auto& outra : lista_tarefas) {
                                 if (outra.estado == Estado::SUSPENSA && outra.mutex_esperado == ev.recurso_id) {
@@ -373,6 +384,7 @@ void Escalonador::avancarTick() {
                         t->quantum_usado = 0;
                         ev.concluido = true;
                         cpus[i] = nullptr; // Sai da CPU
+                        eventos_neste_tick[t->id] += "💿";
                         break;
                     }
                 }
@@ -436,5 +448,6 @@ void Escalonador::avancarTick() {
     clock_global++;
     Snapshot snap = criarSnapshot(sorteados_neste_tick);
     snap.ids_quem_rodou = quem_rodou;
+    snap.eventos_ocorridos = eventos_neste_tick;
     historico.push_back(snap);
 }
