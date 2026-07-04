@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include "TCB.h"
+#include <map>
 
 // Estrutura para salvar o estado de um momento no tempo
 struct Snapshot {
@@ -14,6 +15,8 @@ struct Snapshot {
     std::vector<int> ids_task_cpu; 
     std::vector<int> ids_fila_prontos; 
     std::vector<int> ids_sorteio; 
+    std::map<int, int> mutexes_estado;
+    std::vector<int> ids_quem_rodou;
 };
 
 class Escalonador {
@@ -26,6 +29,7 @@ public:
     int alpha = 0; //(envelhecimento)
     std::string algoritmo;
 
+    std::map<int, int> mutexes;     // chave: id do mutex, valor: id da tarefa usando mutex (-1 se livre)
 
     std::vector<TCB> lista_tarefas;
     std::vector<TCB*> cpus;

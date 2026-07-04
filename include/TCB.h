@@ -12,6 +12,7 @@ struct Evento {
     int recurso_id;   // ID p/ Mutex (campo 'xx')
     int instante;
     int duracao;      // Apenas para I/O (campo 'yy')
+    bool concluido = false;
 };
 
 class TCB {
@@ -25,6 +26,8 @@ public:
     int tempo_restante;
     
     int tempo_executado; 
+    int io_restante = 0;        // ticks restantes para io terminar
+    int mutex_esperado = -1;    // id do mutex que a task espera (-1 é nenhum)
 
     int prioridade_estatica;
     int prioridade_dinamica;

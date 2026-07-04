@@ -26,6 +26,7 @@ bool Escalonador::carregarArquivo(const std::string& caminho) {
     if (!arquivo.is_open()) return false;
 
     std::srand(std::time(nullptr)); // Inicializa a semente do sorteio
+    mutexes.clear();
 
     std::string linha;
     if (std::getline(arquivo, linha)) {
@@ -96,7 +97,7 @@ bool Escalonador::carregarArquivo(const std::string& caminho) {
     clock_global = 0;
     tarefas_concluidas = 0;
     tempo_ocioso = 0;
-    //historico.push_back(criarSnapshot());
+    historico.push_back(criarSnapshot());
     return true;
 }
 
@@ -119,6 +120,7 @@ Snapshot Escalonador::criarSnapshot(std::vector<int> sorteios) {
     snap.clock_global = clock_global;
     snap.tarefas_concluidas = tarefas_concluidas;
     snap.tempo_ocioso = tempo_ocioso;
+    snap.mutexes_estado = mutexes;
     snap.lista_tarefas = lista_tarefas; 
     snap.ids_sorteio = sorteios;
     
@@ -131,6 +133,7 @@ void Escalonador::restaurarSnapshot(const Snapshot& snap) {
     clock_global = snap.clock_global;
     tarefas_concluidas = snap.tarefas_concluidas;
     tempo_ocioso = snap.tempo_ocioso;
+    mutexes = snap.mutexes_estado;
     lista_tarefas = snap.lista_tarefas;
 
     cpus.assign(qtde_cpus, nullptr);
@@ -152,12 +155,12 @@ void Escalonador::restaurarSnapshot(const Snapshot& snap) {
 }
 
 void Escalonador::retrocederTick() {
-    if (historico.empty()) {
+    if (historico.size() <= 1) {
         std::cout << "[Aviso] Historico vazio.\n";
         return;
     }
-    restaurarSnapshot(historico.back());
     historico.pop_back();
+    restaurarSnapshot(historico.back());
 }
 
 void Escalonador::avancarTick() {
@@ -176,6 +179,18 @@ void Escalonador::avancarTick() {
         if (lista_tarefas[i].tempo_ingresso == clock_global && lista_tarefas[i].estado == Estado::NOVO) {
             lista_tarefas[i].estado = Estado::PRONTA;
             fila_prontos.push_back(&lista_tarefas[i]);
+        }
+    }
+
+    for (auto& t : lista_tarefas) {
+        if (t.estado == Estado::SUSPENSA) {
+            if (t.io_restante > 0) {
+                t.io_restante--;
+                if (t.io_restante == 0) {
+                    t.estado = Estado::PRONTA; // devolver para pronta (terminou seu io)
+                    fila_prontos.push_back(&t);
+                }
+            }
         }
     }
 
@@ -313,9 +328,63 @@ void Escalonador::avancarTick() {
         if (t->estado == Estado::EXECUTANDO) t->estado = Estado::PRONTA;
     }
 
-    historico.push_back(criarSnapshot(sorteados_neste_tick));
+    for (int i = 0; i < qtde_cpus; i++) {
+        TCB* t = cpus[i];
+        if (t != nullptr) {
+            // Procura se tem algum evento para o instante de tempo atual dela
+            for (auto& ev : t->eventos) {
+                if (!ev.concluido && ev.instante == t->tempo_executado) {                    
+                    if (ev.tipo == "ML") { // Pede Mutex
+                        // Se o mutex não existe no map ou está livre (-1)
+                        if (mutexes.find(ev.recurso_id) == mutexes.end() || mutexes[ev.recurso_id] == -1 || mutexes[ev.recurso_id] == t->id) {
+                            mutexes[ev.recurso_id] = t->id; // Pegou o Mutex! Continua rodando.
+                            ev.concluido = true;
+                        } else {
+                            // Mutex ocupado! Fica suspensa e sai da CPU.
+                            t->estado = Estado::SUSPENSA;
+                            t->mutex_esperado = ev.recurso_id;
+                            t->quantum_usado = 0;
+                            cpus[i] = nullptr; 
+                            break;
+                        }
+                    }
+                    
+                    else if (ev.tipo == "MU") { // Libera Mutex
+                        if (mutexes[ev.recurso_id] == t->id) {
+                            mutexes[ev.recurso_id] = -1; // Liberou!
+                            ev.concluido = true;
 
-    // ----  Controle de ticks ---- //
+                            // Acorda quem tava esperando por esse Mutex (vai pra fila de prontos)
+                            for (auto& outra : lista_tarefas) {
+                                if (outra.estado == Estado::SUSPENSA && outra.mutex_esperado == ev.recurso_id) {
+                                    outra.estado = Estado::PRONTA;
+                                    outra.mutex_esperado = -1;
+                                    fila_prontos.push_back(&outra);
+                                }
+                            }
+                        } else {
+                            ev.concluido = true; 
+                        }
+                    }
+                    
+                    else if (ev.tipo == "IO") { // Operação de I/O
+                        t->estado = Estado::SUSPENSA;
+                        t->io_restante = ev.duracao;
+                        t->quantum_usado = 0;
+                        ev.concluido = true;
+                        cpus[i] = nullptr; // Sai da CPU
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    std::vector<int> quem_rodou;
+    for (int i = 0; i < qtde_cpus; i++) {
+        quem_rodou.push_back(cpus[i] ? cpus[i]->id : -1);
+    }
+        // ----  Controle de ticks ---- //
     bool alguma_cpu_trabalhando = false;
     std::vector<int> tarefas_processadas_neste_tick;
 
@@ -333,7 +402,7 @@ void Escalonador::avancarTick() {
                 cpus[i]->tempo_executado++;
             } 
             if (quantum > 0 && cpus[i]->quantum_usado >= quantum && cpus[i]->tempo_restante > 0) {
-                cpus[i]->estado = Estado::PRONTA; // Retorna pra fila
+                //cpus[i]->estado = Estado::PRONTA; // Retorna pra fila
                 cpus[i]->quantum_usado = 0;       // Reseta o quantum
             }
         } else {
@@ -365,4 +434,7 @@ void Escalonador::avancarTick() {
         }
     }
     clock_global++;
+    Snapshot snap = criarSnapshot(sorteados_neste_tick);
+    snap.ids_quem_rodou = quem_rodou;
+    historico.push_back(snap);
 }

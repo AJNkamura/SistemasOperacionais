@@ -233,11 +233,12 @@ void Interface::desenharGantt() {
 
     // Desenhar as tarefas conforme o histórico de fotos
     for (const auto& snap : core.historico) {
+        if (snap.clock_global == 0) continue; // <--- ADICIONE ESTA LINHA (Ignora a foto vazia do início)
         // o bloco se posiciona exatamente a partir de seu respectivo clock
-        int x = snap.clock_global * T_WIDTH;
+        int x = (snap.clock_global - 1) * T_WIDTH; 
         
-        for (int c = 0; c < core.qtde_cpus && c < (int)snap.ids_task_cpu.size(); ++c) {
-            int tid = snap.ids_task_cpu[c];
+        for (int c = 0; c < core.qtde_cpus && c < (int)snap.ids_quem_rodou.size(); ++c) {
+            int tid = snap.ids_quem_rodou[c];
             if (tid != -1) {
                 Estado estado_na_foto = Estado::NOVO;
                 int t_restante_na_foto = 1;
@@ -269,7 +270,7 @@ void Interface::desenharGantt() {
                     if (snap.clock_global > 0) {
                         for (const auto& prev_snap : core.historico) {
                             if (prev_snap.clock_global == snap.clock_global - 1) {
-                                for (int prev_tid : prev_snap.ids_task_cpu) {
+                                for (int prev_tid : prev_snap.ids_quem_rodou) {
                                     if (prev_tid == tid) {
                                         inicio_de_bloco = false;
                                         break;
