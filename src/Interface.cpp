@@ -171,7 +171,7 @@ void Interface::desenharGantt() {
     int CPU_HEIGHT = 50;
     const int LABEL_X = -65;
 
-    int max_ticks = core.clock_global + 5; 
+    int max_ticks = core.clock_global; 
     int largura_total = max_ticks * T_WIDTH;
     int altura_total = core.qtde_cpus * CPU_HEIGHT;
 
@@ -185,6 +185,8 @@ void Interface::desenharGantt() {
         numTick->setPos(x - 5, -20);
         numTick->setDefaultTextColor(Qt::darkGray);
     }
+
+    cenaGantt->setSceneRect(LABEL_X, -40, largura_total + abs(LABEL_X) + 50, altura_total + 80);
 
     for (int c = 0; c < core.qtde_cpus; ++c) {
         QGraphicsTextItem* cpuLabel = cenaGantt->addText(QString("CPU %1").arg(c + 1));

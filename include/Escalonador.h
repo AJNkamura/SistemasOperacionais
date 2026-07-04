@@ -9,6 +9,7 @@
 struct Snapshot {
     int clock_global;
     int tarefas_concluidas;
+    int tempo_ocioso;
     std::vector<TCB> lista_tarefas;
     std::vector<int> ids_task_cpu; 
     std::vector<int> ids_fila_prontos; 

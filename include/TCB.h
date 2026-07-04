@@ -16,6 +16,7 @@ public:
     int tempo_restante;
     int prioridade;
     Estado estado;
+    int quantum_usado = 0;
 
     TCB(int id, std::string cor, int ingresso, int duracao, int prio);
 };

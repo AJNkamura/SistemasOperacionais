@@ -65,6 +65,7 @@ bool Escalonador::carregarArquivo(const std::string& caminho) {
     clock_global = 0;
     tarefas_concluidas = 0;
     tempo_ocioso = 0;
+    //historico.push_back(criarSnapshot());
     return true;
 }
 
@@ -86,6 +87,7 @@ Snapshot Escalonador::criarSnapshot(std::vector<int> sorteios) {
     Snapshot snap;
     snap.clock_global = clock_global;
     snap.tarefas_concluidas = tarefas_concluidas;
+    snap.tempo_ocioso = tempo_ocioso;
     snap.lista_tarefas = lista_tarefas; 
     snap.ids_sorteio = sorteios;
     
@@ -97,6 +99,7 @@ Snapshot Escalonador::criarSnapshot(std::vector<int> sorteios) {
 void Escalonador::restaurarSnapshot(const Snapshot& snap) {
     clock_global = snap.clock_global;
     tarefas_concluidas = snap.tarefas_concluidas;
+    tempo_ocioso = snap.tempo_ocioso;
     lista_tarefas = snap.lista_tarefas;
 
     cpus.assign(qtde_cpus, nullptr);
@@ -132,6 +135,8 @@ void Escalonador::avancarTick() {
         for (int i = 0; i < qtde_cpus; i++) if (cpus[i] != nullptr) cpus_vazias = false;
         if (cpus_vazias) return;
     }
+
+    std::srand(clock_global); 
 
     int total_tarefas = lista_tarefas.size();
     std::vector<int> sorteados_neste_tick; 
@@ -275,6 +280,8 @@ void Escalonador::avancarTick() {
         if (t->estado == Estado::EXECUTANDO) t->estado = Estado::PRONTA;
     }
 
+    historico.push_back(criarSnapshot(sorteados_neste_tick));
+
     // ----  Controle de ticks ---- //
     bool alguma_cpu_trabalhando = false;
     std::vector<int> tarefas_processadas_neste_tick;
@@ -287,13 +294,18 @@ void Escalonador::avancarTick() {
             }
             tarefas_processadas_neste_tick.push_back(cpus[i]->id);
 
-            if (cpus[i]->tempo_restante > 0) cpus[i]->tempo_restante--;
+            if (cpus[i]->tempo_restante > 0){
+                cpus[i]->tempo_restante--;
+                cpus[i]->quantum_usado++;
+            } 
+            if (quantum > 0 && cpus[i]->quantum_usado >= quantum && cpus[i]->tempo_restante > 0) {
+                cpus[i]->estado = Estado::PRONTA; // Retorna pra fila
+                cpus[i]->quantum_usado = 0;       // Reseta o quantum
+            }
         } else {
             if (tarefas_concluidas < total_tarefas) tempo_ocioso++;
         }
     }
-
-    historico.push_back(criarSnapshot(sorteados_neste_tick));
 
     for (int i = 0; i < qtde_cpus; i++) {
         if (cpus[i] != nullptr && cpus[i]->tempo_restante <= 0) {
