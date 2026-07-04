@@ -30,10 +30,13 @@ bool Escalonador::carregarArquivo(const std::string& caminho) {
     std::string linha;
     if (std::getline(arquivo, linha)) {
         std::stringstream ss(linha);
-        std::string s_quantum, s_cpus;
+        std::string s_quantum, s_cpus, s_alpha;
         std::getline(ss, algoritmo, ';');
         std::getline(ss, s_quantum, ';');
         std::getline(ss, s_cpus, ';');
+        if (std::getline(ss, s_alpha, ';')) { // Se tiver o 4º parâmetro
+            alpha = std::stoi(trim(s_alpha));
+        }
         algoritmo = toUpper(trim(algoritmo));
         quantum   = std::stoi(trim(s_quantum));
         qtde_cpus = std::stoi(trim(s_cpus));
@@ -42,20 +45,48 @@ bool Escalonador::carregarArquivo(const std::string& caminho) {
     while (std::getline(arquivo, linha)) {
         if (linha.empty()) continue;
         std::stringstream ss(linha);
-        std::string s_id, s_cor, s_in, s_dur, s_prio;
+        std::string s_id, s_cor, s_in, s_dur, s_prio, evento_str;
         std::getline(ss, s_id,   ';');
         std::getline(ss, s_cor,  ';');
         std::getline(ss, s_in,   ';');
         std::getline(ss, s_dur,  ';');
         std::getline(ss, s_prio, ';');
- 
-        lista_tarefas.emplace_back(
-            std::stoi(trim(s_id)),
-            trim(s_cor),
-            std::stoi(trim(s_in)),
-            std::stoi(trim(s_dur)),
-            std::stoi(trim(s_prio))
+
+        std::string s_id_limpo = "";
+        for (char c : s_id) {
+            if (isdigit(c)) s_id_limpo += c;
+        }
+        int id_final = s_id_limpo.empty() ? 0 : std::stoi(s_id_limpo);
+
+        //criar tarefa
+        TCB nova_tarefa(
+            id_final, trim(s_cor), std::stoi(trim(s_in)),
+            std::stoi(trim(s_dur)), std::stoi(trim(s_prio))
         );
+
+        //ler eventos
+        while (std::getline(ss, evento_str, ';')) {
+            evento_str = trim(evento_str);
+            if(evento_str.empty()) continue;
+
+            Evento ev;
+            if (evento_str.substr(0, 2) == "ML" || evento_str.substr(0, 2) == "MU") {
+                ev.tipo = evento_str.substr(0, 2);
+                ev.recurso_id = std::stoi(evento_str.substr(2, 2)); // Pega o 'xx'
+                ev.instante = std::stoi(evento_str.substr(5, 2));   // Pega o '00'
+                ev.duracao = 0;
+            } else if (evento_str.substr(0, 2) == "IO") {
+                ev.tipo = "IO";
+                ev.recurso_id = 0;
+                size_t traco = evento_str.find('-');
+                ev.instante = std::stoi(evento_str.substr(3, traco - 3));
+                ev.duracao = std::stoi(evento_str.substr(traco + 1));
+            }
+            //inserir eventos na tarefa
+            nova_tarefa.eventos.push_back(ev);
+        }
+ 
+        lista_tarefas.push_back(nova_tarefa);
     }
     arquivo.close();
 
@@ -171,9 +202,9 @@ void Escalonador::avancarTick() {
             bool empate = false;
 
             //criterio PRIOP: maior prioridade 
-            if (algoritmo == "PRIOP") {
-                if (candidata->prioridade > atual_melhor->prioridade) { trocar = true; id_ganhou_sorteio = -1; }
-                else if (candidata->prioridade == atual_melhor->prioridade) empate = true;
+            if (algoritmo == "PRIOP" || algoritmo == "PRIOPENV") {
+                if (candidata->prioridade_dinamica > atual_melhor->prioridade_dinamica) { trocar = true; id_ganhou_sorteio = -1; }
+                else if (candidata->prioridade_dinamica == atual_melhor->prioridade_dinamica) empate = true;
             }
             //criterio SRTF: menor tempo restante
             else if (algoritmo == "SRTF") {
@@ -243,11 +274,12 @@ void Escalonador::avancarTick() {
         // Se as CPUs estão cheias, tenta a preempção
         if (!alocou) {
             int pior_cpu_idx = -1;
-            if (algoritmo == "PRIOP") {
-                int menor_prio = melhor_da_fila->prioridade;
+            if (algoritmo == "PRIOP" || algoritmo == "PRIOPENV") {
+                int menor_prio = melhor_da_fila->prioridade_dinamica;
                 for (int i = 0; i < qtde_cpus; i++) {
-                    if (cpus[i] != nullptr && cpus[i]->prioridade < menor_prio) {
-                        menor_prio = cpus[i]->prioridade; pior_cpu_idx = i;
+                    if (cpus[i] != nullptr && cpus[i]->prioridade_dinamica < menor_prio) {
+                        menor_prio = cpus[i]->prioridade_dinamica; 
+                        pior_cpu_idx = i;
                     }
                 }
             }
@@ -255,7 +287,8 @@ void Escalonador::avancarTick() {
                 int maior_restante = melhor_da_fila->tempo_restante;
                 for (int i = 0; i < qtde_cpus; i++) {
                     if (cpus[i] != nullptr && cpus[i]->tempo_restante > maior_restante) {
-                        maior_restante = cpus[i]->tempo_restante; pior_cpu_idx = i;
+                        maior_restante = cpus[i]->tempo_restante; 
+                        pior_cpu_idx = i;
                     }
                 }
             }
@@ -297,6 +330,7 @@ void Escalonador::avancarTick() {
             if (cpus[i]->tempo_restante > 0){
                 cpus[i]->tempo_restante--;
                 cpus[i]->quantum_usado++;
+                cpus[i]->tempo_executado++;
             } 
             if (quantum > 0 && cpus[i]->quantum_usado >= quantum && cpus[i]->tempo_restante > 0) {
                 cpus[i]->estado = Estado::PRONTA; // Retorna pra fila
@@ -304,6 +338,19 @@ void Escalonador::avancarTick() {
             }
         } else {
             if (tarefas_concluidas < total_tarefas) tempo_ocioso++;
+        }
+    }
+
+    if (algoritmo == "PRIOPENV") {
+        for (auto* t : fila_prontos) {
+            // Aumenta a prioridade dinâmica de quem tá na fila
+            t->prioridade_dinamica += alpha; 
+        }
+        // Reseta a prioridade de quem acabou de entrar na CPU
+        for (int i = 0; i < qtde_cpus; i++) {
+            if (cpus[i] != nullptr) {
+                cpus[i]->prioridade_dinamica = cpus[i]->prioridade_estatica;
+            }
         }
     }
 

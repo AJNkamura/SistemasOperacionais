@@ -8,6 +8,11 @@ TCB::TCB(int id, std::string cor, int ingresso, int duracao, int prio) {
     this->tempo_duracao = duracao;
     this->duracao_original = duracao;
     this->tempo_restante = duracao;
-    this->prioridade = prio;
+    this->tempo_executado = 0;
+
+    this->prioridade_estatica = prio;
+    this->prioridade_dinamica = prio;
+    
     this->estado = Estado::NOVO;
+    this->quantum_usado = 0;
 }

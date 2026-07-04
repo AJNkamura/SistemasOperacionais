@@ -127,7 +127,7 @@ void Interface::atualizarUI() {
 
         QTableWidgetItem *itemID       = new QTableWidgetItem(QString("T%1").arg(t.id));
         QTableWidgetItem *itemEstado   = new QTableWidgetItem(strEstado);
-        QTableWidgetItem *itemPrio     = new QTableWidgetItem(QString::number(t.prioridade));
+        QTableWidgetItem *itemPrio     = new QTableWidgetItem(QString::number(t.prioridade_estatica));
         QTableWidgetItem *itemIngresso = new QTableWidgetItem(QString::number(t.tempo_ingresso));
         QTableWidgetItem *itemRestante = new QTableWidgetItem(QString::number(t.tempo_restante));
 
@@ -326,7 +326,8 @@ void Interface::btnEdicao() {
 
         for (auto& t : core.lista_tarefas) {
             if (t.id == idTarefa) {
-                t.prioridade = novaPrio;
+                t.prioridade_estatica = novaPrio;
+                t.prioridade_dinamica = novaPrio;
                 t.tempo_restante = novoTempoRestante;
                 if (t.estado != novoEstado && t.estado != Estado::TERMINADA) {
                      t.estado = novoEstado;

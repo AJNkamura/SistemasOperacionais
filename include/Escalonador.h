@@ -23,6 +23,7 @@ public:
     int qtde_cpus = 0;
     int quantum = 0;
     int tempo_ocioso = 0;
+    int alpha = 0; //(envelhecimento)
     std::string algoritmo;
 
 
