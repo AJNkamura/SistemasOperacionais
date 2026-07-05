@@ -15,7 +15,7 @@ Certifique-se de ter o Qt e os compiladores básicos instalados:
 
 # 1. Instale as dependências (Qt5 e ferramentas de build)
 sudo apt update
-sudo apt install build-essential qtbase5-dev qt5-qmake qtchooser qt5-default
+sudo apt install build-essential qtbase5-dev qt5-qmake qtchooser
 
 # 2. Compile o projeto
 mkdir build && cd build 
@@ -32,9 +32,9 @@ Para cumprir o requisito de rodar o programa sem necessidade de bibliotecas extr
 3. Abra o **Qt Command Prompt** (MinGW) no menu Iniciar.
 4. Navegue até a pasta de *release* gerada pelo Qt Creator e rode o comando para empacotar as DLLs junto ao `.exe`:
 ```cmd
-windeployqt Escalonador.exe
+windeployqt SimuladorSO.exe
 ```
-5. Agora você pode zipar a pasta inteira e executá-la em qualquer máquina Windows clicando em `Escalonador.exe`.
+5. Agora você pode zipar a pasta inteira e executá-la em qualquer máquina Windows clicando em `SimuladorSO.exe`.
 
 ---
 
