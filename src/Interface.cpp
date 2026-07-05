@@ -21,12 +21,11 @@ Interface::Interface(QWidget *parent) : QMainWindow(parent) {
 
     // Painel Esquerdo - Gráfico e Botões
     QVBoxLayout *leftLayout = new QVBoxLayout();
-    
     cenaGantt = new QGraphicsScene(this);
     viewGantt = new QGraphicsView(cenaGantt);
     viewGantt->setAlignment(Qt::AlignTop | Qt::AlignLeft); 
     leftLayout->addWidget(viewGantt);
-
+    // Botões da parte de baixo
     QHBoxLayout *botoesLayout = new QHBoxLayout();
     QPushButton *btnCarregar = new QPushButton("Carregar TXT");
     QPushButton *btnRetroceder = new QPushButton("<< Retroceder");
@@ -51,6 +50,7 @@ Interface::Interface(QWidget *parent) : QMainWindow(parent) {
     tabelaTarefas->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     tabelaTarefas->setEditTriggers(QAbstractItemView::DoubleClicked); 
     
+    // Legenda para o Gantt abaixo da lista de tarefas
     QLabel* textLegenda = new QLabel();
     textLegenda->setTextFormat(Qt::RichText);
     textLegenda->setWordWrap(true);
@@ -161,7 +161,7 @@ void Interface::atualizarUI() {
         tabelaTarefas->setItem(i, 3, itemIngresso);
         tabelaTarefas->setItem(i, 4, itemRestante);
  
-        // Coloriza o fundo da linha conforme o estado 
+        // Pinta o fundo da linha conforme o estado 
         QColor bg = Qt::white;
         if (t.tempo_restante <= 0 && t.estado != Estado::NOVO) bg = QColor("#e0e0e0"); 
         else if (t.estado == Estado::EXECUTANDO) bg = QColor("#c8f0c8"); 
@@ -197,6 +197,7 @@ void Interface::desenharGantt() {
     int offset_suspensas = altura_cpus + 40; 
     int altura_total_gantt = offset_suspensas + (core.lista_tarefas.size() * 30);
 
+    //desenha cada tick
     for (int t = 0; t <= max_ticks; t++) {
         int x = t * T_WIDTH;
         
@@ -208,6 +209,7 @@ void Interface::desenharGantt() {
         numTick->setDefaultTextColor(Qt::darkGray);
     }
 
+    //desenha cada cpu
     for (int c = 0; c < core.qtde_cpus; ++c) {
         QGraphicsTextItem* cpuLabel = cenaGantt->addText(QString("CPU %1").arg(c + 1));
         cpuLabel->setPos(LABEL_X, c * CPU_HEIGHT + (CPU_HEIGHT / 4));
@@ -217,11 +219,13 @@ void Interface::desenharGantt() {
         cenaGantt->addLine(0, c * CPU_HEIGHT, largura_total, c * CPU_HEIGHT, penRow);
     }
 
+    //label para parte de eventos
     cenaGantt->addLine(0, altura_cpus, largura_total, altura_cpus, QPen(Qt::black, 2)); 
     QGraphicsTextItem* labelSusp = cenaGantt->addText("Tarefas Suspensas ( Padrão 'X' = E/S  |  Padrão '+' = Mutex ):");
     labelSusp->setPos(LABEL_X, altura_cpus + 5);
     labelSusp->setDefaultTextColor(Qt::darkRed);
 
+    //desenha cada tarefa
     for (size_t i = 0; i < core.lista_tarefas.size(); ++i) {
         int y_row = offset_suspensas + (i * 30);
         QGraphicsTextItem* tLabel = cenaGantt->addText(QString("T%1").arg(core.lista_tarefas[i].id));
@@ -233,6 +237,7 @@ void Interface::desenharGantt() {
     cenaGantt->addLine(0, altura_total, largura_total, altura_total, QPen(Qt::black, 2)); 
     cenaGantt->addLine(0, 0, 0, altura_total, QPen(Qt::black, 2));                                                        
 
+    //método para desenhar a cor da tarefa
     auto getCor = [](const std::vector<TCB>& tarefas, int tid) -> QString {
         for (const auto& t : tarefas) {
             if (t.id == tid) return QString("#") + QString::fromStdString(t.cor_hex);
@@ -240,20 +245,21 @@ void Interface::desenharGantt() {
         return "#DDDDDD";
     };
 
+    //método para desenhar os ícones de eventos
     auto drawBadge = [&](QString icones, double cx, double cy) {
         if (icones.isEmpty()) return;
         QGraphicsTextItem* txt = cenaGantt->addText(icones);
         
         QFont f = txt->font();
-        f.setPointSize(9); // Reduz um pouquinho pra caber perfeito no circulo
+        f.setPointSize(9); 
         txt->setFont(f);
         
-        double w = 24.0; // Largura suficiente para 2 ícones
-        double h = 14.0; // Altura enxuta
+        double w = 24.0; 
+        double h = 14.0; 
         double rx = cx - (w / 2.0);
         double ry = cy - (h / 2.0);
         
-        // Retângulo branco com bordas totalmente arredondadas
+        // retângulo branco com bordas arredondadas
         QGraphicsPathItem* bg = new QGraphicsPathItem();
         QPainterPath path;
         path.addRoundedRect(rx, ry, w, h, h / 2.0, h / 2.0);
@@ -265,10 +271,10 @@ void Interface::desenharGantt() {
 
         QRectF b = txt->boundingRect();
         txt->setPos(cx - (b.width() / 2.0), cy - (b.height() / 2.0) + 1.5);
-        txt->setZValue(15);
+        txt->setZValue(15); //um tequinho pra baixo do label TXX
     };
 
-    // Renderização global dos ícones de ingresso
+    // renderização dos ícones de ingresso
     std::map<int, std::vector<int>> chegadas_por_tick;
     for (const auto& t : core.lista_tarefas) {
         if (t.tempo_ingresso <= core.clock_global) {
@@ -292,7 +298,7 @@ void Interface::desenharGantt() {
         iconeChegada->setZValue(10);
     }
 
-    // Desenhar as tarefas conforme o histórico de fotos
+    // desenhar as tarefas conforme o histórico de fotos
     for (const auto& snap : core.historico) {
         if (snap.clock_global == 0) continue; 
         // o bloco se posiciona exatamente a partir de seu respectivo clock
@@ -351,7 +357,8 @@ void Interface::desenharGantt() {
                 drawBadge(icones, x + T_WIDTH / 2.0, c * CPU_HEIGHT + 28);
             }
         }
-        //suspensas
+
+        // tarefas suspensas
         for (size_t i = 0; i < snap.lista_tarefas.size(); ++i) {
             const TCB& t = snap.lista_tarefas[i];
             if (t.estado == Estado::SUSPENSA) {
@@ -359,10 +366,10 @@ void Interface::desenharGantt() {
                 QString corStr = getCor(snap.lista_tarefas, t.id);
                 QColor corFundo(corStr);
 
-                // Define o padrão gráfico do Qt baseado no tipo de bloqueio
+                // define o padrão gráfico do Qt baseado no tipo de bloqueio
                 QBrush brush(corFundo);
                 if (t.io_restante > 0) {
-                    brush.setStyle(Qt::DiagCrossPattern); // Padrão X para E/S
+                    brush.setStyle(Qt::DiagCrossPattern); // Padrão X para E/S (IO)
                 } else if (t.mutex_esperado != -1) {
                     brush.setStyle(Qt::CrossPattern); // Padrão + para Mutex
                 }
@@ -372,7 +379,7 @@ void Interface::desenharGantt() {
                 rect->setPen(QPen(Qt::black));
                 rect->setZValue(0);
 
-                // Desenha o badge no centro do bloco suspenso (se o evento ocorreu agora)
+                // desenha o badge no centro do bloco suspenso (se o evento ocorreu agora)
                 if (snap.eventos_ocorridos.count(t.id) && std::find(snap.ids_quem_rodou.begin(), snap.ids_quem_rodou.end(), t.id) == snap.ids_quem_rodou.end()) {
                     QString icones = QString::fromStdString(snap.eventos_ocorridos.at(t.id));
                     drawBadge(icones, x + T_WIDTH / 2.0, y_row + 10);
@@ -389,7 +396,8 @@ void Interface::desenharGantt() {
     cenaGantt->setSceneRect(cenaGantt->itemsBoundingRect().adjusted(-50, -50, 100, 100));
 }
 
-void Interface::btnEdicao() {
+void Interface::btnEdicao() { 
+    //método para edição dos atributos de cada tarefa a partir da interface em tempo de execução
     if (timerPlay->isActive()) return; 
 
     for (int i = 0; i < tabelaTarefas->rowCount(); ++i) {
@@ -423,6 +431,7 @@ void Interface::btnEdicao() {
 }
 
 void Interface::btnExportarClicado() {
+    // método para exportar o diagrama de Gantt
     cenaGantt->clearSelection();
     QRectF rect = cenaGantt->itemsBoundingRect();
     if (rect.isEmpty()) return;

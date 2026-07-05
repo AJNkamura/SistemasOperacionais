@@ -28,7 +28,6 @@ private:
     Escalonador core;
     QTimer *timerPlay;
 
-
     QGraphicsView *viewGantt;
     QGraphicsScene *cenaGantt;
     QTableWidget *tabelaTarefas;

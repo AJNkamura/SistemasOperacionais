@@ -6,7 +6,7 @@
 #include <cstdlib> 
 #include <ctime>   
 
-// Remove espaços em branco
+// Remove espaços em branco na string lida
 static std::string trim(const std::string& s) {
     size_t start = s.find_first_not_of(" \t\r\n");
     size_t end   = s.find_last_not_of(" \t\r\n");
@@ -14,7 +14,7 @@ static std::string trim(const std::string& s) {
     return s.substr(start, end - start + 1);
 }
 
-// Converte string para maiuscula
+// Converte string recebida para maiuscula
 static std::string toUpper(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(), ::toupper);
     return s;
@@ -35,14 +35,16 @@ bool Escalonador::carregarArquivo(const std::string& caminho) {
         std::getline(ss, algoritmo, ';');
         std::getline(ss, s_quantum, ';');
         std::getline(ss, s_cpus, ';');
-        if (std::getline(ss, s_alpha, ';')) { // Se tiver o 4º parâmetro
+        if (std::getline(ss, s_alpha, ';')) { // Se tiver o 4º parâmetro (envelhecimento do priopEnv)
             alpha = std::stoi(trim(s_alpha));
         }
         algoritmo = toUpper(trim(algoritmo));
         quantum   = std::stoi(trim(s_quantum));
         qtde_cpus = std::stoi(trim(s_cpus));
     }
+
     lista_tarefas.clear();
+
     while (std::getline(arquivo, linha)) {
         if (linha.empty()) continue;
         std::stringstream ss(linha);
@@ -57,7 +59,7 @@ bool Escalonador::carregarArquivo(const std::string& caminho) {
         for (char c : s_id) {
             if (isdigit(c)) s_id_limpo += c;
         }
-        int id_final = s_id_limpo.empty() ? 0 : std::stoi(s_id_limpo);
+        int id_final = s_id_limpo.empty() ? 0 : std::stoi(s_id_limpo); //limpar o t do ID da tarefa
 
         //criar tarefa
         TCB nova_tarefa(
@@ -83,14 +85,14 @@ bool Escalonador::carregarArquivo(const std::string& caminho) {
                 ev.instante = std::stoi(evento_str.substr(3, traco - 3));
                 ev.duracao = std::stoi(evento_str.substr(traco + 1));
             }
-            //inserir eventos na tarefa
+            // inserir eventos na tarefa
             nova_tarefa.eventos.push_back(ev);
         }
- 
+        // guardar tarefa na lista
         lista_tarefas.push_back(nova_tarefa);
     }
     arquivo.close();
-
+    // preparar para execução
     cpus.assign(qtde_cpus, nullptr);
     fila_prontos.clear();
     historico.clear();
@@ -102,6 +104,7 @@ bool Escalonador::carregarArquivo(const std::string& caminho) {
 }
 
 bool Escalonador::isFinalizado() {
+    //confere se terminaram todas as tarefas
     int total_tarefas = lista_tarefas.size();
     if (total_tarefas == 0) return true;
 
@@ -130,6 +133,7 @@ Snapshot Escalonador::criarSnapshot(std::vector<int> sorteios) {
 }
 
 void Escalonador::restaurarSnapshot(const Snapshot& snap) {
+    // ler snapshot e preencher dados nas listas
     clock_global = snap.clock_global;
     tarefas_concluidas = snap.tarefas_concluidas;
     tempo_ocioso = snap.tempo_ocioso;
@@ -164,6 +168,7 @@ void Escalonador::retrocederTick() {
 }
 
 void Escalonador::avancarTick() {
+    //motor principal
     if (tarefas_concluidas >= (int)lista_tarefas.size()) {
         bool cpus_vazias = true;
         for (int i = 0; i < qtde_cpus; i++) if (cpus[i] != nullptr) cpus_vazias = false;
@@ -175,6 +180,7 @@ void Escalonador::avancarTick() {
     int total_tarefas = lista_tarefas.size();
     std::vector<int> sorteados_neste_tick; 
 
+    // lê estados das tarefas e armazena na fila de prontas
     for (size_t i = 0; i < lista_tarefas.size(); i++) {
         if (lista_tarefas[i].tempo_ingresso == clock_global && lista_tarefas[i].estado == Estado::NOVO) {
             lista_tarefas[i].estado = Estado::PRONTA;
@@ -182,6 +188,7 @@ void Escalonador::avancarTick() {
         }
     }
 
+    //tira as tarefas suspensas por IO de suspensão (voltam à fila de prontas) se a atividade de IO terminou
     for (auto& t : lista_tarefas) {
         if (t.estado == Estado::SUSPENSA) {
             if (t.io_restante > 0) {
@@ -194,6 +201,7 @@ void Escalonador::avancarTick() {
         }
     }
 
+    //colocar a tarefa em execução em último na fila de prontas
     for (int i = 0; i < qtde_cpus; i++) {
         if (cpus[i] != nullptr && cpus[i]->estado == Estado::EXECUTANDO) {
             if (std::find(fila_prontos.begin(), fila_prontos.end(), cpus[i]) == fila_prontos.end()) {
@@ -216,7 +224,7 @@ void Escalonador::avancarTick() {
             bool trocar = false;
             bool empate = false;
 
-            //criterio PRIOP: maior prioridade 
+            //criterios PRIOP: maior prioridade 
             if (algoritmo == "PRIOP" || algoritmo == "PRIOPENV") {
                 if (candidata->prioridade_dinamica > atual_melhor->prioridade_dinamica) { trocar = true; id_ganhou_sorteio = -1; }
                 else if (candidata->prioridade_dinamica == atual_melhor->prioridade_dinamica) {
@@ -331,16 +339,18 @@ void Escalonador::avancarTick() {
         }
     }
 
+    // redundância (se tarefas estão na fila de prontas, tem o estado PRONTA)
     for (auto* t : fila_prontos) {
         if (t->estado == Estado::EXECUTANDO) t->estado = Estado::PRONTA;
     }
 
+    // processar eventos
     std::map<int, std::string> eventos_neste_tick;
 
     for (int i = 0; i < qtde_cpus; i++) {
         TCB* t = cpus[i];
         if (t != nullptr) {
-            // Procura se tem algum evento para o instante de tempo atual dela
+            // procura se tem algum evento para o instante de tempo atual da tarefa
             for (auto& ev : t->eventos) {
                 if (!ev.concluido && ev.instante == t->tempo_executado) {                    
                     if (ev.tipo == "ML") { // Pede Mutex
@@ -396,10 +406,12 @@ void Escalonador::avancarTick() {
     for (int i = 0; i < qtde_cpus; i++) {
         quem_rodou.push_back(cpus[i] ? cpus[i]->id : -1);
     }
-        // ----  Controle de ticks ---- //
+
+    // ----  Controle de ticks ---- //
     bool alguma_cpu_trabalhando = false;
     std::vector<int> tarefas_processadas_neste_tick;
 
+    //incrementar contadores para que as coisas andem
     for (int i = 0; i < qtde_cpus; i++) {
         if (cpus[i] != nullptr) {
             alguma_cpu_trabalhando = true;
@@ -414,7 +426,6 @@ void Escalonador::avancarTick() {
                 cpus[i]->tempo_executado++;
             } 
             if (quantum > 0 && cpus[i]->quantum_usado >= quantum && cpus[i]->tempo_restante > 0) {
-                //cpus[i]->estado = Estado::PRONTA; // Retorna pra fila
                 cpus[i]->quantum_usado = 0;       // Reseta o quantum
             }
         } else {
@@ -422,6 +433,7 @@ void Escalonador::avancarTick() {
         }
     }
 
+    // envelhecimento do PRIOPEnv
     if (algoritmo == "PRIOPENV") {
         for (auto* t : fila_prontos) {
             // Aumenta a prioridade dinâmica de quem tá na fila
@@ -435,6 +447,7 @@ void Escalonador::avancarTick() {
         }
     }
 
+    // lógica de término das tarefas e mudança para o estado Terminada
     for (int i = 0; i < qtde_cpus; i++) {
         if (cpus[i] != nullptr && cpus[i]->tempo_restante <= 0) {
             cpus[i]->tempo_restante = 0;
@@ -445,6 +458,8 @@ void Escalonador::avancarTick() {
             cpus[i] = nullptr;
         }
     }
+
+    //fim do tick: incrementar clock, criar snapshot e armazenar quais eventos já ocorreram
     clock_global++;
     Snapshot snap = criarSnapshot(sorteados_neste_tick);
     snap.ids_quem_rodou = quem_rodou;
