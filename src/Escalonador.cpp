@@ -426,7 +426,10 @@ void Escalonador::avancarTick() {
                 cpus[i]->tempo_executado++;
             } 
             if (quantum > 0 && cpus[i]->quantum_usado >= quantum && cpus[i]->tempo_restante > 0) {
-                cpus[i]->quantum_usado = 0;       // Reseta o quantum
+                cpus[i]->quantum_usado = 0;
+                cpus[i]->estado = Estado::PRONTA; // Remove o status de executando
+                fila_prontos.push_back(cpus[i]);  // Joga pro final da fila de prontas
+                cpus[i] = nullptr;                // Libera a CPU
             }
         } else {
             if (tarefas_concluidas < total_tarefas) tempo_ocioso++;
