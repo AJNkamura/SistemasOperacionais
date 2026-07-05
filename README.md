@@ -6,6 +6,7 @@
 # Clone o repositório
 git clone https://github.com/AJNkamura/SistemasOperacionais.git
 cd SistemasOperacionais
+```
 
 ### No Linux (Ubuntu/Debian)
 
@@ -69,4 +70,3 @@ Os instantes de tempo dos eventos são relativos ao **início da execução da t
 3. Use **"<< Retroceder"** caso precise voltar no tempo para entender um comportamento (deadlock, preempção, etc).
 4. Clique em **"Play Automático"** para rodar a simulação continuamente até o fim.
 5. Ao final, clique em **"Exportar Imagem"** para salvar o Gráfico de Gantt gerado em PNG.
-```
