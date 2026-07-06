@@ -14,6 +14,14 @@
 #include <map>
 
 Interface::Interface(QWidget *parent) : QMainWindow(parent) {
+    this->setStyleSheet(
+        "QWidget { background-color: #FFFFFF; color: #000000; }"
+        "QPushButton { background-color: #F0F0F0; border: 1px solid #B0B0B0; border-radius: 4px; padding: 5px; }"
+        "QPushButton:hover { background-color: #E0E0E0; }"
+        "QHeaderView::section { background-color: #F0F0F0; border: 1px solid #B0B0B0; padding: 4px; font-weight: bold; }"
+        "QTableWidget { gridline-color: #DDDDDD; }"
+    );
+
     //Constroi interface
     QWidget *centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
@@ -54,7 +62,7 @@ Interface::Interface(QWidget *parent) : QMainWindow(parent) {
     QLabel* textLegenda = new QLabel();
     textLegenda->setTextFormat(Qt::RichText);
     textLegenda->setWordWrap(true);
-    textLegenda->setFixedHeight(125);
+    textLegenda->setMinimumHeight(150);
     textLegenda->setStyleSheet("background-color: #fcfcfc; border: 1px solid #ccc; font-size: 13px; padding: 6px; border-radius: 4px;");
     textLegenda->setText(
         "<b style='color: #333;'>Legenda de Eventos e Gráficos:</b><br>"
